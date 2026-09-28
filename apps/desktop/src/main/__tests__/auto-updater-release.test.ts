@@ -27,7 +27,7 @@ describe('fetchLatestRelease', () => {
         name: 'Puntovivo 2.0',
         body: 'Release notes',
         published_at: '2026-07-13T12:00:00.000Z',
-        html_url: 'https://github.com/johnny4young/puntovivo/releases/tag/v2.0.0',
+        html_url: 'https://github.com/mateodev1/puntovivo/releases/tag/v2.0.0',
       });
     });
 
@@ -37,7 +37,7 @@ describe('fetchLatestRelease', () => {
       name: 'Puntovivo 2.0',
       notes: 'Release notes',
       date: '2026-07-13T12:00:00.000Z',
-      url: 'https://github.com/johnny4young/puntovivo/releases/tag/v2.0.0',
+      url: 'https://github.com/mateodev1/puntovivo/releases/tag/v2.0.0',
     });
   });
 

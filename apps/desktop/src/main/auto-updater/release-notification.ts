@@ -1,7 +1,7 @@
 // .ts keeps this Electron-free module directly executable under node --test.
 import { isNewerVersion } from '../version-compare.ts';
 
-const REPO_OWNER = 'johnny4young';
+const REPO_OWNER = 'mateodev1';
 const REPO_NAME = 'puntovivo';
 
 export const REPO_SLUG = `${REPO_OWNER}/${REPO_NAME}`;

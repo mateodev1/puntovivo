@@ -301,7 +301,7 @@ jobs:
   # ============================================================================
   # The marketing site moved to Cloudflare Pages (deploy-web.yml), so GitHub Pages
   # now serves only the electron-updater feed. The packaged app's app-update.yml
-  # points electron-updater at https://johnny4young.github.io/puntovivo/, and this
+  # points electron-updater at https://mateodev1.github.io/puntovivo/, and this
   # job publishes the per-OS latest*.yml there with their binary URLs rewritten to
   # the Release downloads (the installers are too large for Pages).
   publish-feed:
@@ -335,7 +335,7 @@ jobs:
 
       - name: Rewrite feed URLs to the Release downloads
         run: >-
-          node ./scripts/rewrite-update-feed.mjs feed "$RELEASE_TAG"
+          node ./scripts/rewrite-update-feed.mjs feed "$RELEASE_TAG" "$GITHUB_REPOSITORY"
           --rollout "$ROLLOUT_PERCENTAGE" --mode normal
 
       # Keep rewritten appcasts with the immutable release so later staged

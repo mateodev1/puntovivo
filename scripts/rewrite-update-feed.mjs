@@ -22,7 +22,7 @@ import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import process from 'node:process';
 
-const DEFAULT_REPO_SLUG = 'johnny4young/puntovivo';
+const DEFAULT_REPO_SLUG = 'mateodev1/puntovivo';
 const ROLLOUT_PERCENTAGES = new Set([10, 50, 100]);
 const UPDATE_POLICY_SCHEMA_VERSION = 1;
 

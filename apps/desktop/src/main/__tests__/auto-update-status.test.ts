@@ -10,7 +10,7 @@ import {
   releasePageUrl,
 } from '../auto-update-status.ts';
 
-const REPO = 'johnny4young/puntovivo';
+const REPO = 'mateodev1/puntovivo';
 
 /** Minimal UpdateInfo for tests; only the fields mapReleaseFields reads matter. */
 function info(overrides: Partial<UpdateInfo>): UpdateInfo {
@@ -89,7 +89,7 @@ describe('releasePageUrl', () => {
   it('builds the v-prefixed GitHub release tag URL', () => {
     assert.equal(
       releasePageUrl(REPO, '1.2.3'),
-      'https://github.com/johnny4young/puntovivo/releases/tag/v1.2.3'
+      'https://github.com/mateodev1/puntovivo/releases/tag/v1.2.3'
     );
   });
 });
@@ -109,7 +109,7 @@ describe('mapReleaseFields', () => {
       releaseName: 'Big Update',
       releaseNotes: 'notes here',
       releaseDate: '2026-06-28T12:00:00.000Z',
-      updateUrl: 'https://github.com/johnny4young/puntovivo/releases/tag/v2.0.0',
+      updateUrl: 'https://github.com/mateodev1/puntovivo/releases/tag/v2.0.0',
     });
   });
 

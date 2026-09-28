@@ -54,7 +54,7 @@ and the boot sites in
 
 The packaged updater checks hourly on a fixed internal cadence. Its staged
 percentage and target come from the credential-free
-`https://johnny4young.github.io/puntovivo/update-policy.json`; they are release
+`https://mateodev1.github.io/puntovivo/update-policy.json`; they are release
 controls, not workstation environment variables. The workflow only promotes
 normal staged releases. A monotonic floor sealed with `safeStorage` prevents
 that mutable origin from authorizing a downgrade; emergency rollback uses a

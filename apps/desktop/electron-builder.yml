@@ -13,7 +13,7 @@ electronVersion: 43.4.1
 # is always --publish never - release.yml ships everything itself.
 publish:
   provider: generic
-  url: https://johnny4young.github.io/puntovivo/
+  url: https://mateodev1.github.io/puntovivo/
 directories:
   output: out-builder
   # default is build/, which the root .gitignore excludes; use a tracked dir so

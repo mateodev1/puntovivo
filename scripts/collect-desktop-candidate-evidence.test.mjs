@@ -111,7 +111,7 @@ function input(outDir, overrides = {}) {
     supportTarget: 'macos-15-sequoia-arm64',
     recoveryEvidencePath: path.join(outDir, RECOVERY_EVIDENCE_NAME),
     generatedAt: new Date('2026-07-24T14:00:00.000Z'),
-    repository: 'johnny4young/puntovivo',
+    repository: 'mateodev1/puntovivo',
     workflowRunId: '100',
     workflowRunAttempt: '2',
     ...overrides,

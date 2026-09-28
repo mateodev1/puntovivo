@@ -8,7 +8,7 @@
  * rollback uses a separately delivered manual installer.
  */
 
-export const UPDATE_POLICY_URL = 'https://johnny4young.github.io/puntovivo/update-policy.json';
+export const UPDATE_POLICY_URL = 'https://mateodev1.github.io/puntovivo/update-policy.json';
 export const UPDATE_POLICY_TIMEOUT_MS = 5_000;
 
 export type UpdateRolloutMode = 'normal' | 'rollback';

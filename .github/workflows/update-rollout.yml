@@ -73,7 +73,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node ./scripts/rewrite-update-feed.mjs feed "$TARGET_TAG" \
+          node ./scripts/rewrite-update-feed.mjs feed "$TARGET_TAG" "$GITHUB_REPOSITORY" \
             --rollout "$REQUESTED_ROLLOUT_PERCENTAGE" --mode normal
 
       - name: Add a feed index

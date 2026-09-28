@@ -16,7 +16,7 @@ const DOWNLOAD = {
   releaseName: 'Puntovivo 1.7.0',
   releaseNotes: 'Hardening',
   releaseDate: '2026-07-15T12:00:00.000Z',
-  updateUrl: 'https://github.com/johnny4young/puntovivo/releases/tag/v1.7.0',
+  updateUrl: 'https://github.com/mateodev1/puntovivo/releases/tag/v1.7.0',
 };
 
 describe('desktop update history', () => {

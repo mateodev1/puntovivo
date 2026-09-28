@@ -117,7 +117,7 @@ describe('CompanyAutoUpdateCard', () => {
         releaseName: 'v1.2.0',
         releaseNotes: 'Notify-only release',
         releaseDate: '2026-04-08T15:30:00.000Z',
-        updateUrl: 'https://github.com/johnny4young/puntovivo/releases/tag/v1.2.0',
+        updateUrl: 'https://github.com/mateodev1/puntovivo/releases/tag/v1.2.0',
         error: null,
         reason: null,
       }),
@@ -139,7 +139,7 @@ describe('CompanyAutoUpdateCard', () => {
     const releaseLink = await screen.findByRole('link', { name: /view release/i });
     expect(releaseLink).toHaveAttribute(
       'href',
-      'https://github.com/johnny4young/puntovivo/releases/tag/v1.2.0'
+      'https://github.com/mateodev1/puntovivo/releases/tag/v1.2.0'
     );
     // Manual mode never offers an in-place restart/install.
     expect(screen.queryByRole('button', { name: /restart to install/i })).not.toBeInTheDocument();

@@ -9,7 +9,7 @@ import {
   versionFromTag,
 } from './rewrite-update-feed.mjs';
 
-const BASE = 'https://github.com/johnny4young/puntovivo/releases/download/v1.2.0';
+const BASE = 'https://github.com/mateodev1/puntovivo/releases/download/v1.2.0';
 
 const MAC_FEED = `version: 1.2.0
 files:
@@ -22,13 +22,13 @@ releaseDate: '2026-06-28T21:50:40.554Z'
 `;
 
 test('releaseDownloadBase builds the GitHub Release download base', () => {
-  assert.equal(releaseDownloadBase('johnny4young/puntovivo', 'v1.2.0'), BASE);
-  assert.equal(releaseDownloadBase('johnny4young/puntovivo', ' v1.2.0 '), BASE);
+  assert.equal(releaseDownloadBase('mateodev1/puntovivo', 'v1.2.0'), BASE);
+  assert.equal(releaseDownloadBase('mateodev1/puntovivo', ' v1.2.0 '), BASE);
   assert.throws(
-    () => releaseDownloadBase('johnny4young/puntovivo/../../other', 'v1.2.0'),
+    () => releaseDownloadBase('mateodev1/puntovivo/../../other', 'v1.2.0'),
     /owner\/repo form/
   );
-  assert.throws(() => releaseDownloadBase('johnny4young/puntovivo', 'latest'), /semantic version/);
+  assert.throws(() => releaseDownloadBase('mateodev1/puntovivo', 'latest'), /semantic version/);
 });
 
 test('rewriteFeed makes url + path absolute and leaves the rest untouched', () => {
