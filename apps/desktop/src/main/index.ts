@@ -63,6 +63,7 @@ import { getServer, getServerDatabase, getSqliteClient, setServer } from './runt
 import { createServerLifecycle } from './server-lifecycle.js';
 import { createTrayController } from './tray-controller.js';
 import { disableBuiltinSpellchecker } from './window-config.js';
+import { resolveLinuxPasswordStore } from './linux-password-store.js';
 import { createWindowLifecycle } from './window-lifecycle.js';
 import {
   isPackagedRecoveryRequested,
@@ -92,6 +93,16 @@ installProcessCrashHandlers({
 // Pin the name before the first userData lookup. Development Electron would
 // otherwise store its DB/key envelope under the generic Electron directory.
 app.setName('Puntovivo');
+
+const linuxPasswordStore = resolveLinuxPasswordStore({
+  platform: process.platform,
+  currentDesktop: process.env.XDG_CURRENT_DESKTOP,
+  hasPasswordStoreSwitch: app.commandLine.hasSwitch('password-store'),
+});
+if (linuxPasswordStore) {
+  app.commandLine.appendSwitch('password-store', linuxPasswordStore);
+  mainLog.info({ passwordStore: linuxPasswordStore }, 'linux password store selected');
+}
 
 const WEB_DEV_SERVER_URL = process.env.WEB_DEV_SERVER_URL || 'http://localhost:3000';
 const isDev = !app.isPackaged;
