@@ -60,6 +60,7 @@ describe(' launch import safety', () => {
 
   it('keeps filenames and error values out of reusable audit metadata', () => {
     expect(getImportSourceFormat('Merchant Name.XLSX')).toBe('xlsx');
+    expect(getImportSourceFormat('FOX Nº153.xls')).toBe('xls');
     expect(getImportSourceFormat('unknown.txt')).toBe('unknown');
     expect(
       getSafeImportErrorMetadata(

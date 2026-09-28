@@ -3,6 +3,11 @@ import { z } from 'zod';
 
 export const importDecimalFormatSchema = z.enum(['auto', 'dot', 'comma']);
 export const launchImportDataModeSchema = z.enum(['demo', 'real']);
+/**
+ * `create` skips SKUs that already exist; `upsert` (supplier price lists)
+ * creates new SKUs and updates cost, sale price, and tax of existing ones.
+ */
+export const productImportModeSchema = z.enum(['create', 'upsert']);
 
 // Keep the transport bounded while allowing application validation to return
 // row-level field issues instead of rejecting an otherwise previewable file.
@@ -59,6 +64,7 @@ export const previewLaunchProductImportInput = z
     dataMode: launchImportDataModeSchema,
     sourceName: z.string().trim().min(1).max(240),
     decimalFormat: importDecimalFormatSchema.default('auto'),
+    importMode: productImportModeSchema.default('create'),
     rows: launchProductImportRowsSchema,
   })
   .strict();

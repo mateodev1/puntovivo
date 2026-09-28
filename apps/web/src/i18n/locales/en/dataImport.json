@@ -36,14 +36,18 @@
     "upload": {
       "kicker": "Step 1",
       "title": "Choose a source file",
-      "description": "Upload a UTF-8 CSV or an Excel .xlsx file up to 10 MB and 500 data rows. The file stays in this browser until you preview it."
+      "description": "Upload a UTF-8 CSV or an Excel .xlsx file up to 10 MB and 500 data rows. The file stays in this browser until you preview it.",
+      "productDescription": "Upload a UTF-8 CSV or an Excel file (.xlsx or .xls) up to 10 MB. Supplier price lists are read from their header row and validated in batches of 500 rows. The file stays in this browser until you preview it."
     },
     "map": {
       "kicker": "Step 2",
       "title": "Map your columns",
       "description": "Confirm the detected columns. Product name and SKU are required; every other field can be left unmapped.",
       "notMapped": "Do not import",
-      "decimalFormat": "Number format"
+      "decimalFormat": "Number format",
+      "costCandidates": "This file has several price columns ({{columns}}). Choose which one is your cost.",
+      "upsertNote": "In a supplier list, the file prices are your cost. The sale price of existing products is not changed and new products start at 0 unless you map a column.",
+      "costRequired": "Map the cost column to continue."
     },
     "preview": {
       "kicker": "Step 3",
@@ -81,19 +85,27 @@
     "importReady_one": "Import {{count}} ready row",
     "importReady_other": "Import {{count}} ready rows",
     "downloadIssues": "Download issues",
-    "downloadReport": "Download report"
+    "downloadReport": "Download report",
+    "previewingBatch": "Validating batch {{done}} of {{total}}…",
+    "importingBatch": "Importing batch {{done}} of {{total}}…",
+    "importUpsert_one": "Apply {{count}} row",
+    "importUpsert_other": "Apply {{count}} rows"
   },
   "summary": {
     "ariaLabel": "Import validation summary",
     "total": "Rows",
     "ready": "Ready",
     "duplicates": "Duplicates",
-    "invalid": "Invalid"
+    "invalid": "Invalid",
+    "updates": "To update",
+    "unchanged": "Unchanged"
   },
   "statuses": {
     "ready": "Ready",
     "duplicate": "Duplicate",
-    "invalid": "Invalid"
+    "invalid": "Invalid",
+    "update": "Update",
+    "unchanged": "Unchanged"
   },
   "issues": {
     "required": "Required value is missing",
@@ -114,7 +126,8 @@
     "duplicate_existing_barcode": "Barcode already exists in this business",
     "concurrent_duplicate": "Another import created this product while this import was running",
     "import_failed": "The product could not be imported",
-    "stock_failed": "The product was imported but opening stock could not be recorded"
+    "stock_failed": "The product was imported but opening stock could not be recorded",
+    "concurrent_update": "The product changed while this import was running; preview the file again"
   },
   "boolean": {
     "yes": "Yes",
@@ -129,7 +142,17 @@
     "noIssues": "No issues",
     "emptyValue": "—",
     "issueFormat": "{{field}}: {{issue}}",
-    "previewLimit": "Showing the first 100 of {{count}} rows. The summary and import include every row."
+    "previewLimit": "Showing the first 100 of {{count}} rows. The summary and import include every row.",
+    "change": "Change",
+    "newProduct": "New product",
+    "noChanges": "No changes",
+    "costChange": "Cost {{from}} → {{to}} ({{percent}})",
+    "priceChange": "Price {{from}} → {{to}}",
+    "taxChange": "Tax {{from}}% → {{to}}%",
+    "filter": "Show",
+    "filterAll": "All rows ({{count}})",
+    "filterStatus": "{{status}} ({{count}})",
+    "filteredLimit": "Showing the first 100 of {{count}} rows for this filter."
   },
   "report": {
     "kicker": "Completed",
@@ -144,7 +167,9 @@
       "importedWithWarnings": "Imported with warnings",
       "failed": "Failed",
       "skipped": "Skipped",
-      "invalid": "Invalid"
+      "invalid": "Invalid",
+      "updated": "Updated",
+      "unchanged": "Unchanged"
     },
     "boolean": {
       "yes": "Yes",
@@ -156,8 +181,11 @@
       "skipped": "Skipped",
       "invalid": "Invalid",
       "failed": "Failed",
-      "warnings": "Warnings"
-    }
+      "warnings": "Warnings",
+      "updated": "Updated",
+      "unchanged": "Unchanged"
+    },
+    "descriptionUpsert": "Products created: {{imported}}. Products updated: {{updated}}. Unchanged: {{unchanged}}."
   },
   "template": {
     "sampleName": "Sample coffee",
@@ -173,13 +201,16 @@
     "too_many_columns": "The file exceeds the 50-column limit.",
     "row_too_wide": "A data row contains more values than the header row.",
     "malformed_csv": "The CSV contains an unfinished or invalid quoted value.",
-    "workbook_empty": "The Excel workbook does not contain a worksheet."
+    "workbook_empty": "The Excel workbook does not contain a worksheet.",
+    "unsupported_workbook": "Choose a .csv, .xlsx, or .xls file.",
+    "too_many_workbook_rows": "Import at most 20,000 rows at a time."
   },
   "toast": {
     "previewError": "The file could not be validated",
     "importError": "The import could not be completed",
     "imported_one": "{{count}} product imported",
-    "imported_other": "{{count}} products imported"
+    "imported_other": "{{count}} products imported",
+    "importedUpsert": "Import applied: {{imported}} created, {{updated}} updated"
   },
   "entitySelector": {
     "label": "Choose the data to import"
@@ -426,5 +457,36 @@
       "siigo-products-es-v1": "Tested fingerprint: Código producto, Nombre producto, Precio de venta, Costo, Existencia, Impuesto cargo, and Unidad de medida.",
       "world-office-inventory-es-v1": "Tested fingerprint: Código artículo, Descripción artículo, Precio venta, Costo promedio, Existencia, Porcentaje IVA, and Unidad."
     }
+  },
+  "source": {
+    "kicker": "File options",
+    "title": "Worksheet, header row, and mode",
+    "description": "Puntovivo detected the most likely worksheet and header row. Correct them when the file has titles, notes, or several worksheets.",
+    "sheet": "Worksheet",
+    "hiddenSheet": "{{name}} (hidden)",
+    "sheetRows": "{{name}} · {{count}} rows",
+    "headerRow": "Header row",
+    "headerRowOption": "Row {{row}}: {{preview}}",
+    "importMode": "Import mode",
+    "modes": {
+      "create": {
+        "label": "Create new products",
+        "description": "Creates products whose code does not exist and skips the ones already in the catalog."
+      },
+      "upsert": {
+        "label": "Supplier list: create and update",
+        "description": "Creates new products and updates the cost and tax (and the sale price when you map a column) of existing ones."
+      }
+    },
+    "skuPrefix": "Code prefix",
+    "skuPrefixPlaceholder": "e.g. FOX-",
+    "skuPrefixHelp": "Added before every row code so codes from different suppliers do not collide.",
+    "defaultTaxRate": "Default tax rate (%)",
+    "defaultTaxRatePlaceholder": "e.g. 21",
+    "defaultTaxRateHelp": "Applied to rows without a tax column or value."
+  },
+  "preview": {
+    "zeroPriceWarning_one": "{{count}} new product will have a sale price of 0. Set it before selling it.",
+    "zeroPriceWarning_other": "{{count}} new products will have a sale price of 0. Set it before selling them."
   }
 }

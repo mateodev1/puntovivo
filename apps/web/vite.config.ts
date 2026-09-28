@@ -212,6 +212,8 @@ export default defineConfig(({ mode }) => {
                   if (/[\\/]node_modules[\\/]zustand[\\/]/.test(id)) return 'state-runtime';
                   if (/[\\/]node_modules[\\/](jspdf|jspdf-autotable)[\\/]/.test(id)) return 'pdf';
                   if (/[\\/]node_modules[\\/](exceljs|jszip)[\\/]/.test(id)) return 'xlsx';
+                  // SheetJS only reads legacy .xls supplier lists; keep it out of the ExcelJS chunk.
+                  if (/[\\/]node_modules[\\/]xlsx[\\/]/.test(id)) return 'xls-legacy';
                   if (/[\\/]node_modules[\\/](codemirror|@codemirror|@lezer)[\\/]/.test(id))
                     return 'codemirror';
                   if (/[\\/]node_modules[\\/]@dnd-kit[\\/]/.test(id)) return 'dnd';

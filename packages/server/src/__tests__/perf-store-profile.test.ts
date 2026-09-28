@@ -287,6 +287,8 @@ describe('store-sized operational profile', () => {
     expect(preview.summary).toEqual({
       total: operationalBudget.launchImport.rows,
       ready: operationalBudget.launchImport.rows,
+      updates: 0,
+      unchanged: 0,
       duplicates: 0,
       invalid: 0,
     });

@@ -24,8 +24,9 @@ const mocks = vi.hoisted(() => ({
 
 const preview = {
   dataMode: 'real' as const,
+  importMode: 'create' as const,
   previewHash: 'preview-hash',
-  summary: { total: 3, ready: 1, duplicates: 1, invalid: 1 },
+  summary: { total: 3, ready: 1, updates: 0, unchanged: 0, duplicates: 1, invalid: 1 },
   rows: [
     {
       rowNumber: 2,
@@ -101,26 +102,28 @@ vi.mock('@/lib/trpc', () => ({
     }),
     launchMigration: {
       previewProducts: {
-        useMutation: (options: { onSuccess: (result: typeof preview) => void }) => ({
-          mutate: (input: unknown) => {
+        useMutation: () => ({
+          mutateAsync: async (input: unknown) => {
             mocks.previewMutate(input);
-            options.onSuccess(preview);
+            return preview;
           },
           isPending: mocks.previewPending,
           reset: mocks.previewReset,
         }),
       },
       importProducts: {
-        useMutation: (options: { onSuccess: (result: unknown) => Promise<void> }) => ({
-          mutate: (input: unknown) => {
+        useMutation: () => ({
+          mutateAsync: async (input: unknown) => {
             mocks.importMutate(input);
-            void options.onSuccess({
+            return {
               dataMode: 'real',
               importId: 'import-1',
               completedAt: '2026-07-15T12:00:00.000Z',
               summary: {
                 total: 3,
                 imported: 1,
+                updated: 0,
+                unchanged: 0,
                 stockInitialized: 1,
                 skipped: 1,
                 invalid: 1,
@@ -135,6 +138,7 @@ vi.mock('@/lib/trpc', () => ({
                   issues: [],
                 },
               ],
+              updatedRows: [],
               skippedRows: [
                 {
                   rowNumber: 4,
@@ -142,7 +146,7 @@ vi.mock('@/lib/trpc', () => ({
                 },
               ],
               failedRows: [],
-            });
+            };
           },
           isPending: mocks.importPending,
           reset: mocks.importReset,
@@ -237,6 +241,7 @@ describe(' through  DataImportPage', () => {
       dataMode: 'real',
       sourceName: 'launch-products.csv',
       decimalFormat: 'auto',
+      importMode: 'create',
       rows: [
         {
           rowNumber: 2,
@@ -351,6 +356,51 @@ describe(' through  DataImportPage', () => {
       'puntovivo-launch-import-import-1',
       { includeTimestamp: true }
     );
+  });
+
+  it('reads a supplier price list below its title and previews it in supplier-list mode', async () => {
+    const user = userEvent.setup();
+    render(<DataImportPage />);
+    await user.click(screen.getByRole('radio', { name: /Real business data/ }));
+
+    const { default: ExcelJS } = await import('exceljs/dist/exceljs.bare.min.js');
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('A');
+    sheet.getCell('B2').value = 'LISTA DE PRECIOS Nº 153';
+    sheet.getRow(3).values = ['Código', 'Descripción', 'Precio LISTA', 'Precio NETO'];
+    sheet.getRow(4).values = [133, 'Ecotermo 53 LT', 556568.52, 322816.85];
+    const buffer = await workbook.xlsx.writeBuffer();
+    await user.upload(
+      screen.getByLabelText('Choose CSV or Excel'),
+      new File([buffer as BlobPart], 'FOX.xlsx')
+    );
+
+    expect(await screen.findByTestId('data-import-source-options')).toBeInTheDocument();
+    expect(screen.getByLabelText('Header row')).toHaveDisplayValue(/^Row 3: Código/);
+    expect(screen.getByRole('radio', { name: /Supplier list: create and update/ })).toBeChecked();
+    expect(screen.getByLabelText(/Product name/)).toHaveValue('Descripción');
+    expect(screen.getByTestId('data-import-cost-candidates')).toHaveTextContent(
+      'Precio LISTA, Precio NETO'
+    );
+    expect(screen.getByRole('button', { name: 'Validate and preview' })).toBeDisabled();
+
+    await user.selectOptions(screen.getByLabelText(/^Cost/), 'Precio NETO');
+    await user.type(screen.getByLabelText('Code prefix'), 'FOX-');
+    await user.type(screen.getByLabelText('Default tax rate (%)'), '21');
+    await user.click(screen.getByRole('button', { name: 'Validate and preview' }));
+
+    expect(mocks.previewMutate).toHaveBeenCalledWith({
+      dataMode: 'real',
+      sourceName: 'FOX.xlsx',
+      decimalFormat: 'auto',
+      importMode: 'upsert',
+      rows: [
+        {
+          rowNumber: 4,
+          values: { name: 'Ecotermo 53 LT', sku: 'FOX-133', cost: '322816.85', taxRate: '21' },
+        },
+      ],
+    });
   });
 
   it('switches between isolated launch-migration workflows', async () => {

@@ -117,6 +117,8 @@ describe(' launch migration', () => {
     expect(parseImportNumber('2.500', 'auto')).toBe(2500);
     expect(parseImportNumber('1234.567', 'auto')).toBe(1234.567);
     expect(parseImportNumber('2,5', 'auto')).toBe(2.5);
+    expect(parseImportNumber('0.105', 'auto')).toBe(0.105);
+    expect(parseImportNumber('0,500', 'auto')).toBe(0.5);
     expect(parseImportNumber('not-a-number', 'auto')).toBeNull();
     expect(parseImportNumber('abc12', 'auto')).toBeNull();
     expect(parseImportNumber('=1+1', 'auto')).toBeNull();
@@ -233,7 +235,14 @@ describe(' launch migration', () => {
         ],
       });
 
-    expect(preview.summary).toEqual({ total: 6, ready: 2, duplicates: 3, invalid: 1 });
+    expect(preview.summary).toEqual({
+      total: 6,
+      ready: 2,
+      updates: 0,
+      unchanged: 0,
+      duplicates: 3,
+      invalid: 1,
+    });
     expect(preview.rows[0]).toMatchObject({
       rowNumber: 2,
       status: 'ready',
@@ -716,6 +725,8 @@ describe(' launch migration', () => {
     expect(result.summary).toEqual({
       total: 3,
       imported: 2,
+      updated: 0,
+      unchanged: 0,
       stockInitialized: 1,
       skipped: 0,
       invalid: 1,
@@ -803,6 +814,165 @@ describe(' launch migration', () => {
         },
       ])
     );
+  });
+
+  it('reads fractional supplier VAT rates as percentages', async () => {
+    const preview = await appRouter
+      .createCaller(createTestContext())
+      .launchMigration.previewProducts({
+        dataMode: 'demo',
+        sourceName: 'lista-proveedor.xlsx',
+        decimalFormat: 'auto',
+        rows: [
+          row(2, { name: 'Abrazadera', sku: 'VAT-FRACTION-1', cost: '8404.7355', taxRate: '0.21' }),
+          row(3, { name: 'Disco flap', sku: 'VAT-FRACTION-2', cost: '1979.11', taxRate: '0.105' }),
+          row(4, { name: 'Piolin', sku: 'VAT-FRACTION-3', cost: '1357.14', taxRate: '21' }),
+        ],
+      });
+
+    expect(preview.rows.map(item => item.normalized.taxRate)).toEqual([21, 10.5, 21]);
+    expect(preview.rows[0]?.normalized.cost).toBe(8404.74);
+    expect(preview.summary.ready).toBe(3);
+  });
+
+  it('updates existing products from a supplier list without touching unmapped fields', async () => {
+    const caller = appRouter.createCaller(createTestContext());
+    const existing = await caller.products.create({
+      name: 'Supplier product',
+      sku: 'SUP-24100',
+      barcode: '7700000555001',
+      price: 5000,
+      cost: 3000,
+      stock: 0,
+      minStock: 0,
+      taxRate: 21,
+      initialCost: 3000,
+      isActive: true,
+    });
+    await caller.products.create({
+      name: 'Supplier unchanged',
+      sku: 'SUP-24101',
+      price: 900,
+      cost: 500,
+      stock: 0,
+      minStock: 0,
+      taxRate: 21,
+      initialCost: 500,
+      isActive: true,
+    });
+
+    const input = {
+      dataMode: 'real' as const,
+      sourceName: 'DILMAS.xls',
+      decimalFormat: 'auto' as const,
+      importMode: 'upsert' as const,
+      rows: [
+        row(96, {
+          name: 'Renamed by supplier',
+          sku: 'sup-24100',
+          barcode: '7700000555001',
+          cost: '3500.456',
+          taxRate: '0.105',
+        }),
+        row(97, { name: 'Supplier unchanged', sku: 'SUP-24101', cost: '500', taxRate: '21' }),
+        row(98, {
+          name: 'Brand new supplier item',
+          sku: 'SUP-24102',
+          cost: '120',
+          taxRate: '0.21',
+        }),
+        row(99, {
+          name: 'Barcode clash',
+          sku: 'SUP-24103',
+          barcode: '7700000555001',
+          cost: '10',
+        }),
+      ],
+    };
+
+    const createOnly = await caller.launchMigration.previewProducts({
+      ...input,
+      dataMode: 'demo',
+      importMode: 'create',
+    });
+    expect(createOnly.rows[0]?.status).toBe('duplicate');
+
+    const preview = await caller.launchMigration.previewProducts(input);
+    expect(preview.summary).toMatchObject({
+      total: 4,
+      ready: 1,
+      updates: 1,
+      unchanged: 1,
+      duplicates: 1,
+      invalid: 0,
+    });
+    expect(preview.rows[0]).toMatchObject({
+      status: 'update',
+      existing: { productId: existing.id, cost: 3000, price: 5000, taxRate: 21 },
+      changes: { cost: 3500.46, taxRate: 10.5, vatRateId: null },
+    });
+    expect(preview.rows[0]?.changes).not.toHaveProperty('price');
+    expect(preview.rows[1]?.status).toBe('unchanged');
+    expect(preview.rows[3]).toMatchObject({
+      status: 'duplicate',
+      issues: [{ code: 'duplicate_file_barcode', field: 'barcode' }],
+    });
+
+    const result = await caller.launchMigration.importProducts({
+      ...input,
+      confirmedRealData: true,
+      previewHash: preview.previewHash,
+    });
+    expect(result.summary).toMatchObject({
+      imported: 1,
+      updated: 1,
+      unchanged: 1,
+      skipped: 1,
+      failed: 0,
+    });
+    expect(result.updatedRows).toEqual([{ rowNumber: 96, productId: existing.id }]);
+
+    const updated = await db
+      .select()
+      .from(products)
+      .where(and(eq(products.tenantId, tenantId), eq(products.id, existing.id)))
+      .get();
+    expect(updated).toMatchObject({
+      name: 'Supplier product',
+      cost: 3500.46,
+      price: 5000,
+      taxRate: 10.5,
+    });
+    const created = await db
+      .select()
+      .from(products)
+      .where(and(eq(products.tenantId, tenantId), eq(products.sku, 'SUP-24102')))
+      .get();
+    expect(created).toMatchObject({ cost: 120, price: 0, taxRate: 21 });
+
+    // The commit re-reads the catalog, so an edit made after the operator's
+    // preview is compared against its latest version instead of clobbered
+    // through a stale version token.
+    const rerunInput = { ...input, rows: [input.rows[0]!] };
+    const rerunPreview = await caller.launchMigration.previewProducts(rerunInput);
+    expect(rerunPreview.rows[0]?.status).toBe('unchanged');
+    await caller.products.update({
+      id: existing.id,
+      version: rerunPreview.rows[0]!.existing!.version,
+      cost: 1,
+    });
+    const rerun = await caller.launchMigration.importProducts({
+      ...rerunInput,
+      confirmedRealData: true,
+      previewHash: rerunPreview.previewHash,
+    });
+    expect(rerun.summary).toMatchObject({ updated: 1, unchanged: 0, failed: 0 });
+    const reapplied = await db
+      .select({ cost: products.cost })
+      .from(products)
+      .where(and(eq(products.tenantId, tenantId), eq(products.id, existing.id)))
+      .get();
+    expect(reapplied?.cost).toBe(3500.46);
   });
 
   it('rejects stale preview hashes and non-admin callers', async () => {

@@ -67,6 +67,7 @@
     "react-router": "^8.3.0",
     "tailwind-merge": "^3.6.0",
     "web-vitals": "^6.2.1",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zustand": "^5.0.15"
   },
   "devDependencies": {

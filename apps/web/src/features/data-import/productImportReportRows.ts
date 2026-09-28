@@ -2,7 +2,7 @@
 import type { ProductImportIssue, ProductImportPreview, ProductImportReport } from './types';
 
 export type ProductImportReportStatus =
-  'imported' | 'importedWithWarnings' | 'skipped' | 'invalid' | 'failed';
+  'imported' | 'importedWithWarnings' | 'updated' | 'unchanged' | 'skipped' | 'invalid' | 'failed';
 
 export interface ProductImportReportExportRow {
   rowNumber: number;
@@ -18,11 +18,13 @@ export function buildProductImportReportRows(
   report: ProductImportReport
 ): ProductImportReportExportRow[] {
   const importedByRow = new Map(report.importedRows.map(row => [row.rowNumber, row]));
+  const updatedByRow = new Map(report.updatedRows.map(row => [row.rowNumber, row]));
   const skippedByRow = new Map(report.skippedRows.map(row => [row.rowNumber, row]));
   const failedByRow = new Map(report.failedRows.map(row => [row.rowNumber, row]));
 
   return preview.rows.flatMap<ProductImportReportExportRow>(row => {
     const imported = importedByRow.get(row.rowNumber);
+    const updated = updatedByRow.get(row.rowNumber);
     const skipped = skippedByRow.get(row.rowNumber);
     const failed = failedByRow.get(row.rowNumber);
     const issues = imported?.issues ?? skipped?.issues ?? failed?.issues ?? row.issues;
@@ -30,18 +32,22 @@ export function buildProductImportReportRows(
       ? imported.issues.length > 0
         ? 'importedWithWarnings'
         : 'imported'
-      : skipped
-        ? 'skipped'
-        : failed
-          ? 'failed'
-          : row.status === 'invalid'
-            ? 'invalid'
-            : 'skipped';
+      : updated
+        ? 'updated'
+        : skipped
+          ? 'skipped'
+          : failed
+            ? 'failed'
+            : row.status === 'unchanged'
+              ? 'unchanged'
+              : row.status === 'invalid'
+                ? 'invalid'
+                : 'skipped';
     const base = {
       rowNumber: row.rowNumber,
       status,
       sku: row.normalized.sku,
-      productId: imported?.productId ?? '',
+      productId: imported?.productId ?? updated?.productId ?? '',
       stockInitialized: imported?.stockInitialized ?? null,
     };
 

@@ -12,7 +12,12 @@ interface ImportSourcePanelProps {
   isParsing: boolean;
   onFile: (file: File) => void;
   onReset: () => void;
+  /** File-input accept list; defaults to CSV and XLSX. */
+  accept?: string;
+  descriptionKey?: string;
 }
+const DEFAULT_ACCEPT =
+  '.csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 export function ImportSourcePanel({
   file,
   fileError,
@@ -21,6 +26,8 @@ export function ImportSourcePanel({
   isParsing,
   onFile,
   onReset,
+  accept = DEFAULT_ACCEPT,
+  descriptionKey = 'steps.upload.description',
 }: ImportSourcePanelProps) {
   const { t } = useTranslation('dataImport');
   return (
@@ -32,7 +39,7 @@ export function ImportSourcePanel({
         <h2 id="data-import-upload-title" className="mt-1 text-lg font-semibold text-secondary-900">
           {t('steps.upload.title')}
         </h2>
-        <p className="mt-1 text-sm text-secondary-600">{t('steps.upload.description')}</p>
+        <p className="mt-1 text-sm text-secondary-600">{t(descriptionKey)}</p>
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -56,7 +63,7 @@ export function ImportSourcePanel({
           ref={inputRef}
           id="data-import-file"
           type="file"
-          accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          accept={accept}
           className="sr-only"
           disabled={isBusy}
           onChange={event => {

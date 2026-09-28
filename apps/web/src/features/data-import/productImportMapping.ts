@@ -78,6 +78,10 @@ export function mapProductImportRows(file: ParsedImportFile, mapping: ProductImp
   }));
 }
 
-export function hasRequiredProductMapping(mapping: ProductImportMapping): boolean {
-  return Boolean(mapping.name && mapping.sku);
+/** Supplier-list updates (`requireCost`) are pointless without a cost column. */
+export function hasRequiredProductMapping(
+  mapping: ProductImportMapping,
+  requireCost = false
+): boolean {
+  return Boolean(mapping.name && mapping.sku && (!requireCost || mapping.cost));
 }

@@ -80,8 +80,9 @@ export function parseImportNumber(
       } else {
         const pieces = unsigned.split(separator);
         const suffix = pieces.at(-1) ?? '';
+        // A thousands group never starts with a zero, so `0.105` is a decimal.
         const validThousands =
-          /^[0-9]{1,3}$/.test(pieces[0] ?? '') &&
+          /^[1-9][0-9]{0,2}$/.test(pieces[0] ?? '') &&
           pieces.slice(1).every(group => /^[0-9]{3}$/.test(group));
         if (pieces.length > 2) {
           normalizedUnsigned = validThousands ? pieces.join('') : null;

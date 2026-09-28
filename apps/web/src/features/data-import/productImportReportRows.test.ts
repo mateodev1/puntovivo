@@ -24,8 +24,9 @@ describe(' product import report rows', () => {
     };
     const preview = {
       dataMode: 'real',
+      importMode: 'create',
       previewHash: 'hash',
-      summary: { total: 5, ready: 3, duplicates: 1, invalid: 1 },
+      summary: { total: 5, ready: 3, updates: 0, unchanged: 0, duplicates: 1, invalid: 1 },
       rows: [
         { rowNumber: 2, status: 'ready', normalized: { ...normalized, sku: 'OK' }, issues: [] },
         { rowNumber: 3, status: 'ready', normalized: { ...normalized, sku: 'WARN' }, issues: [] },
@@ -51,6 +52,8 @@ describe(' product import report rows', () => {
       summary: {
         total: 5,
         imported: 2,
+        updated: 0,
+        unchanged: 0,
         stockInitialized: 1,
         skipped: 1,
         invalid: 1,
@@ -66,6 +69,7 @@ describe(' product import report rows', () => {
           issues: [{ code: 'stock_failed', field: 'stock' }],
         },
       ],
+      updatedRows: [],
       skippedRows: [
         {
           rowNumber: 4,

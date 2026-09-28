@@ -9,10 +9,11 @@ import { TRPCError } from '@trpc/server';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 
-import { createProductForImport } from '../products/index.js';
+import { createProductForImport, updateProduct } from '../products/index.js';
 import { recordInventoryEntry } from '../inventory/index.js';
 import { products, units, vatRates } from '../../db/schema.js';
 import { createModuleLogger } from '../../logging/logger.js';
+import { roundMoney } from '../../lib/money.js';
 import { writeAuditLog } from '../../services/audit-logs.js';
 import type {
   CommitLaunchProductImportInput,
@@ -23,6 +24,8 @@ import type {
 import type {
   LaunchMigrationContext,
   NormalizedLaunchProduct,
+  ProductImportChanges,
+  ProductImportExistingProduct,
   ProductImportIssue,
   ProductImportPreviewRow,
 } from './types.js';
@@ -197,6 +200,7 @@ function canonicalImportPayload(input: PreviewLaunchProductImportInput) {
     dataMode: input.dataMode,
     sourceName: input.sourceName,
     decimalFormat: input.decimalFormat,
+    importMode: input.importMode,
     rows: input.rows.map(row => ({ rowNumber: row.rowNumber, values: row.values })),
   };
 }
@@ -234,6 +238,12 @@ function normalizeRow(
   const values = Object.fromEntries(
     numericFields.map(field => [field, parseImportNumber(row.values[field], decimalFormat)])
   ) as Record<(typeof numericFields)[number], number | null>;
+
+  // Supplier lists often store VAT as a fraction (0.21, 0.105). A positive
+  // rate below 1% is not a real VAT rate, so read it as a fraction.
+  if (values.taxRate !== null && values.taxRate > 0 && values.taxRate < 1) {
+    values.taxRate = Math.round(values.taxRate * 100 * 10_000) / 10_000;
+  }
 
   for (const field of numericFields) {
     const value = values[field];
@@ -275,8 +285,8 @@ function normalizeRow(
       barcode,
       unit: resolvedUnit.unit,
       unitId: resolvedUnit.unitId,
-      price: values.price ?? 0,
-      cost: values.cost ?? 0,
+      price: roundMoney(values.price ?? 0),
+      cost: roundMoney(values.cost ?? 0),
       stock: values.stock ?? 0,
       minStock: values.minStock ?? 0,
       taxName: resolvedTax.taxName,
@@ -310,7 +320,11 @@ async function loadImportCatalogs(ctx: LaunchMigrationContext): Promise<ProductI
   return { units: availableUnits, vatRates: availableVatRates };
 }
 
-async function loadExistingKeys(
+interface ExistingCatalogProduct extends ProductImportExistingProduct {
+  vatRateId: string | null;
+}
+
+async function loadExistingProducts(
   ctx: LaunchMigrationContext,
   normalizedRows: NormalizedLaunchProduct[]
 ) {
@@ -326,7 +340,16 @@ async function loadExistingKeys(
   const existingSkuRows =
     skuKeys.length > 0
       ? await ctx.db
-          .select({ sku: products.sku })
+          .select({
+            productId: products.id,
+            version: products.version,
+            sku: products.sku,
+            name: products.name,
+            cost: products.cost,
+            price: products.price,
+            taxRate: products.taxRate,
+            vatRateId: products.vatRateId,
+          })
           .from(products)
           .where(
             and(
@@ -339,7 +362,7 @@ async function loadExistingKeys(
   const existingBarcodeRows =
     barcodeKeys.length > 0
       ? await ctx.db
-          .select({ barcode: products.barcode })
+          .select({ id: products.id, barcode: products.barcode })
           .from(products)
           .where(
             and(
@@ -350,14 +373,51 @@ async function loadExistingKeys(
           .all()
       : [];
 
-  return {
-    skus: new Set(existingSkuRows.map(row => normalizeKey(row.sku))),
-    barcodes: new Set(
-      existingBarcodeRows
-        .map(row => (row.barcode ? normalizeBarcode(row.barcode) : null))
-        .filter((value): value is string => Boolean(value))
-    ),
-  };
+  // A case-insensitive key can match several stored SKUs; such a key is
+  // ambiguous and never selects an update target.
+  const skus = new Map<string, ExistingCatalogProduct[]>();
+  for (const { sku, ...product } of existingSkuRows) {
+    const key = normalizeKey(sku);
+    skus.set(key, [...(skus.get(key) ?? []), product]);
+  }
+  const barcodes = new Map<string, Set<string>>();
+  for (const row of existingBarcodeRows) {
+    if (!row.barcode) continue;
+    const key = normalizeBarcode(row.barcode);
+    barcodes.set(key, (barcodes.get(key) ?? new Set()).add(row.id));
+  }
+  return { skus, barcodes };
+}
+
+function hasRawValue(row: LaunchProductImportRow, field: keyof LaunchProductImportRow['values']) {
+  return Boolean(row.values[field]?.trim());
+}
+
+/**
+ * Fields a supplier-list row changes on an existing product. Only columns
+ * the file actually fills are compared, so an unmapped or empty sale price
+ * never overwrites the stored one.
+ */
+function diffExistingProduct(
+  row: LaunchProductImportRow,
+  normalized: NormalizedLaunchProduct,
+  existing: ExistingCatalogProduct
+): ProductImportChanges {
+  const changes: ProductImportChanges = {};
+  if (hasRawValue(row, 'cost') && normalized.cost !== existing.cost) {
+    changes.cost = normalized.cost;
+  }
+  if (hasRawValue(row, 'price') && normalized.price !== existing.price) {
+    changes.price = normalized.price;
+  }
+  const taxProvided = hasRawValue(row, 'taxRate') || hasRawValue(row, 'taxName');
+  const vatRateChanged =
+    normalized.vatRateId !== null && normalized.vatRateId !== existing.vatRateId;
+  if (taxProvided && (Math.abs(normalized.taxRate - existing.taxRate) > 1e-9 || vatRateChanged)) {
+    changes.taxRate = normalized.taxRate;
+    changes.vatRateId = normalized.vatRateId;
+  }
+  return changes;
 }
 
 export async function previewLaunchProductImport(
@@ -366,49 +426,75 @@ export async function previewLaunchProductImport(
 ) {
   const catalogs = await loadImportCatalogs(ctx);
   const normalizedRows = input.rows.map(row => ({
-    rowNumber: row.rowNumber,
+    row,
     ...normalizeRow(row, input.decimalFormat, catalogs),
   }));
-  const existing = await loadExistingKeys(
+  const existing = await loadExistingProducts(
     ctx,
     normalizedRows.map(row => row.normalized)
   );
+  const upsert = input.importMode === 'upsert';
   const seenSkus = new Set<string>();
   const seenBarcodes = new Set<string>();
 
-  const rows: ProductImportPreviewRow[] = normalizedRows.map(row => {
-    const issues = [...row.issues];
-    const skuKey = normalizeKey(row.normalized.sku);
-    const barcodeKey = row.normalized.barcode ? normalizeBarcode(row.normalized.barcode) : null;
+  const rows: ProductImportPreviewRow[] = normalizedRows.map(({ row, normalized, ...rest }) => {
+    const issues = [...rest.issues];
+    const skuKey = normalizeKey(normalized.sku);
+    const barcodeKey = normalized.barcode ? normalizeBarcode(normalized.barcode) : null;
+    let target: ExistingCatalogProduct | undefined;
 
     if (skuKey) {
+      const matches = existing.skus.get(skuKey) ?? [];
       if (seenSkus.has(skuKey)) {
         issues.push({ code: 'duplicate_file_sku', field: 'sku' });
-      } else if (existing.skus.has(skuKey)) {
-        issues.push({ code: 'duplicate_existing_sku', field: 'sku' });
+      } else if (matches.length > 0) {
+        if (upsert && matches.length === 1) target = matches[0];
+        else issues.push({ code: 'duplicate_existing_sku', field: 'sku' });
       }
       seenSkus.add(skuKey);
     }
     if (barcodeKey) {
+      const owners = existing.barcodes.get(barcodeKey);
       if (seenBarcodes.has(barcodeKey)) {
         issues.push({ code: 'duplicate_file_barcode', field: 'barcode' });
-      } else if (existing.barcodes.has(barcodeKey)) {
+      } else if (owners && !(target && owners.size === 1 && owners.has(target.productId))) {
         issues.push({ code: 'duplicate_existing_barcode', field: 'barcode' });
       }
       seenBarcodes.add(barcodeKey);
     }
 
     const hasValidationIssue = issues.some(issue => !DUPLICATE_ISSUES.has(issue.code));
-    const status = hasValidationIssue ? 'invalid' : issues.length > 0 ? 'duplicate' : 'ready';
-    return { rowNumber: row.rowNumber, status, normalized: row.normalized, issues };
+    if (hasValidationIssue || issues.length > 0 || !target) {
+      const status = hasValidationIssue ? 'invalid' : issues.length > 0 ? 'duplicate' : 'ready';
+      return { rowNumber: row.rowNumber, status, normalized, issues };
+    }
+    const changes = diffExistingProduct(row, normalized, target);
+    return {
+      rowNumber: row.rowNumber,
+      status: Object.keys(changes).length > 0 ? 'update' : 'unchanged',
+      normalized,
+      issues,
+      existing: {
+        productId: target.productId,
+        version: target.version,
+        name: target.name,
+        cost: target.cost,
+        price: target.price,
+        taxRate: target.taxRate,
+      },
+      changes,
+    };
   });
 
   return {
     dataMode: input.dataMode,
+    importMode: input.importMode,
     previewHash: hashLaunchProductImport(input),
     summary: {
       total: rows.length,
       ready: rows.filter(row => row.status === 'ready').length,
+      updates: rows.filter(row => row.status === 'update').length,
+      unchanged: rows.filter(row => row.status === 'unchanged').length,
       duplicates: rows.filter(row => row.status === 'duplicate').length,
       invalid: rows.filter(row => row.status === 'invalid').length,
     },
@@ -443,12 +529,45 @@ export async function commitLaunchProductImport(
     stockInitialized: boolean;
     issues: ProductImportIssue[];
   }> = [];
+  const updatedRows: Array<{ rowNumber: number; productId: string }> = [];
   const failedRows: Array<{ rowNumber: number; issues: ProductImportIssue[] }> = [];
   const skippedRows: Array<{ rowNumber: number; issues: ProductImportIssue[] }> = preview.rows
     .filter(row => row.status === 'duplicate')
     .map(row => ({ rowNumber: row.rowNumber, issues: row.issues }));
 
   for (const row of preview.rows) {
+    if (row.status === 'update' && row.existing && row.changes) {
+      try {
+        await updateProduct(ctx, {
+          id: row.existing.productId,
+          version: row.existing.version,
+          ...row.changes,
+        });
+        updatedRows.push({ rowNumber: row.rowNumber, productId: row.existing.productId });
+      } catch (error) {
+        if (isConflictError(error)) {
+          skippedRows.push({
+            rowNumber: row.rowNumber,
+            issues: [{ code: 'concurrent_update', field: 'sku' }],
+          });
+          continue;
+        }
+        log.error(
+          {
+            ...getSafeImportErrorMetadata(error),
+            tenantId: ctx.tenantId,
+            importId,
+            rowNumber: row.rowNumber,
+          },
+          'product import update failed'
+        );
+        failedRows.push({
+          rowNumber: row.rowNumber,
+          issues: [{ code: 'import_failed', field: 'sku' }],
+        });
+      }
+      continue;
+    }
     if (row.status !== 'ready') continue;
     try {
       const created = await createProductForImport(ctx, {
@@ -572,6 +691,8 @@ export async function commitLaunchProductImport(
         resourceId: importId,
         after: {
           imported: importedRows.length,
+          updated: updatedRows.length,
+          unchanged: preview.summary.unchanged,
           stockInitialized: importedRows.filter(row => row.stockInitialized).length,
           skipped,
           invalid: preview.summary.invalid,
@@ -579,6 +700,7 @@ export async function commitLaunchProductImport(
         },
         metadata: {
           dataMode: input.dataMode,
+          importMode: input.importMode,
           sourceFormat: getImportSourceFormat(input.sourceName),
           previewHash: input.previewHash,
           totalRows: preview.summary.total,
@@ -596,6 +718,8 @@ export async function commitLaunchProductImport(
     summary: {
       total: preview.summary.total,
       imported: importedRows.length,
+      updated: updatedRows.length,
+      unchanged: preview.summary.unchanged,
       stockInitialized: importedRows.filter(row => row.stockInitialized).length,
       skipped,
       invalid: preview.summary.invalid,
@@ -603,6 +727,7 @@ export async function commitLaunchProductImport(
       warnings,
     },
     importedRows,
+    updatedRows,
     skippedRows,
     failedRows,
   };

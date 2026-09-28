@@ -11,6 +11,7 @@ import {
   matchesProductImportProfileSignature,
   type ProductImportProfileId,
 } from './productImportProfiles';
+import type { ProductImportMode } from './productImportSource';
 
 interface ProductImportMappingPanelProps {
   headers: string[];
@@ -18,6 +19,9 @@ interface ProductImportMappingPanelProps {
   decimalFormat: ImportDecimalFormat;
   profileId: ProductImportProfileId;
   detectedProfileId: ProductImportProfileId;
+  importMode?: ProductImportMode;
+  /** Price-like source columns; more than one means the operator must pick the cost. */
+  costCandidates?: string[];
   disabled: boolean;
   onMappingChange: (field: ProductImportField, sourceHeader: string) => void;
   onDecimalFormatChange: (format: ImportDecimalFormat) => void;
@@ -30,6 +34,8 @@ export function ProductImportMappingPanel({
   decimalFormat,
   profileId,
   detectedProfileId,
+  importMode = 'create',
+  costCandidates = [],
   disabled,
   onMappingChange,
   onDecimalFormatChange,
@@ -52,44 +58,63 @@ export function ProductImportMappingPanel({
         <p className="mt-1 text-sm text-secondary-600">{t('steps.map.description')}</p>
       </div>
 
-      <div className="rounded-xl border border-primary-100 bg-primary-50/60 p-4">
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
-          <div>
-            <label htmlFor="data-import-source-profile" className="label mb-2 block">
-              {t('profiles.label')}
-            </label>
-            <select
-              id="data-import-source-profile"
-              value={profileId}
-              disabled={disabled}
-              onChange={event => onProfileChange(event.target.value as ProductImportProfileId)}
-              className="input w-full"
+      {importMode === 'upsert' ? (
+        <div className="space-y-2 rounded-xl border border-primary-100 bg-primary-50/60 p-4">
+          <p className="text-xs font-medium leading-5 text-secondary-800">
+            {t('steps.map.upsertNote')}
+          </p>
+          {!mapping.cost && costCandidates.length > 1 ? (
+            <p
+              className="rounded-lg border border-warning-200 bg-warning-50 px-3 py-2 text-xs font-semibold text-warning-900"
+              data-testid="data-import-cost-candidates"
             >
-              {PRODUCT_IMPORT_PROFILE_IDS.map(id => (
-                <option key={id} value={id}>
-                  {t(`profiles.options.${id}`)}
-                </option>
-              ))}
-            </select>
-          </div>
-          <span className="inline-flex w-fit rounded-full border border-primary-200 bg-white px-3 py-1.5 text-xs font-semibold text-primary-800">
-            {profileId !== 'generic' &&
-            matchesProductImportProfileSignature(headers, profileId) &&
-            profileId === detectedProfileId
-              ? t('profiles.detected')
-              : t('profiles.reviewRequired')}
-          </span>
+              {t('steps.map.costCandidates', { columns: costCandidates.join(', ') })}
+            </p>
+          ) : !mapping.cost ? (
+            <p className="text-xs font-semibold text-warning-900">{t('steps.map.costRequired')}</p>
+          ) : null}
         </div>
-        <p className="mt-3 text-xs font-medium leading-5 text-secondary-800">
-          {t(`profiles.details.${profileId}`)}
-        </p>
-        <p className="mt-3 text-xs leading-5 text-secondary-600">{t('profiles.boundary')}</p>
-      </div>
+      ) : (
+        <div className="rounded-xl border border-primary-100 bg-primary-50/60 p-4">
+          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+            <div>
+              <label htmlFor="data-import-source-profile" className="label mb-2 block">
+                {t('profiles.label')}
+              </label>
+              <select
+                id="data-import-source-profile"
+                value={profileId}
+                disabled={disabled}
+                onChange={event => onProfileChange(event.target.value as ProductImportProfileId)}
+                className="input w-full"
+              >
+                {PRODUCT_IMPORT_PROFILE_IDS.map(id => (
+                  <option key={id} value={id}>
+                    {t(`profiles.options.${id}`)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <span className="inline-flex w-fit rounded-full border border-primary-200 bg-white px-3 py-1.5 text-xs font-semibold text-primary-800">
+              {profileId !== 'generic' &&
+              matchesProductImportProfileSignature(headers, profileId) &&
+              profileId === detectedProfileId
+                ? t('profiles.detected')
+                : t('profiles.reviewRequired')}
+            </span>
+          </div>
+          <p className="mt-3 text-xs font-medium leading-5 text-secondary-800">
+            {t(`profiles.details.${profileId}`)}
+          </p>
+          <p className="mt-3 text-xs leading-5 text-secondary-600">{t('profiles.boundary')}</p>
+        </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {PRODUCT_IMPORT_FIELDS.map(field => {
           const id = `data-import-map-${field}`;
-          const required = field === 'name' || field === 'sku';
+          const required =
+            field === 'name' || field === 'sku' || (importMode === 'upsert' && field === 'cost');
           return (
             <div key={field}>
               <label htmlFor={id} className="label mb-2 block">

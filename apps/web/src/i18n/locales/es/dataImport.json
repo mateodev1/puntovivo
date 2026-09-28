@@ -36,14 +36,18 @@
     "upload": {
       "kicker": "Paso 1",
       "title": "Elige un archivo de origen",
-      "description": "Carga un CSV UTF-8 o un archivo Excel .xlsx de hasta 10 MB y 500 filas de datos. El archivo permanece en este navegador hasta que generes la vista previa."
+      "description": "Carga un CSV UTF-8 o un archivo Excel .xlsx de hasta 10 MB y 500 filas de datos. El archivo permanece en este navegador hasta que generes la vista previa.",
+      "productDescription": "Carga un CSV UTF-8 o un Excel (.xlsx o .xls) de hasta 10 MB. Las listas de proveedores se leen desde su fila de encabezados y se validan en lotes de 500 filas. El archivo permanece en este navegador hasta que generes la vista previa."
     },
     "map": {
       "kicker": "Paso 2",
       "title": "Asigna tus columnas",
       "description": "Confirma las columnas detectadas. El nombre y el SKU son obligatorios; puedes dejar los demás campos sin asignar.",
       "notMapped": "No importar",
-      "decimalFormat": "Formato numérico"
+      "decimalFormat": "Formato numérico",
+      "costCandidates": "Este archivo tiene varias columnas de precio ({{columns}}). Elige cuál es tu costo.",
+      "upsertNote": "En una lista de proveedor, los precios del archivo son tu costo. El precio de venta no se modifica en los productos existentes y queda en 0 en los nuevos, salvo que asignes una columna.",
+      "costRequired": "Asigna la columna de costo para continuar."
     },
     "preview": {
       "kicker": "Paso 3",
@@ -81,19 +85,27 @@
     "importReady_one": "Importar {{count}} fila lista",
     "importReady_other": "Importar {{count}} filas listas",
     "downloadIssues": "Descargar novedades",
-    "downloadReport": "Descargar reporte"
+    "downloadReport": "Descargar reporte",
+    "previewingBatch": "Validando lote {{done}} de {{total}}…",
+    "importingBatch": "Importando lote {{done}} de {{total}}…",
+    "importUpsert_one": "Aplicar {{count}} fila",
+    "importUpsert_other": "Aplicar {{count}} filas"
   },
   "summary": {
     "ariaLabel": "Resumen de validación de la importación",
     "total": "Filas",
     "ready": "Listas",
     "duplicates": "Duplicadas",
-    "invalid": "Inválidas"
+    "invalid": "Inválidas",
+    "updates": "Por actualizar",
+    "unchanged": "Sin cambios"
   },
   "statuses": {
     "ready": "Lista",
     "duplicate": "Duplicada",
-    "invalid": "Inválida"
+    "invalid": "Inválida",
+    "update": "Actualizar",
+    "unchanged": "Sin cambios"
   },
   "issues": {
     "required": "Falta un valor obligatorio",
@@ -114,7 +126,8 @@
     "duplicate_existing_barcode": "El código de barras ya existe en esta empresa",
     "concurrent_duplicate": "Otra importación creó este producto mientras se ejecutaba la importación actual",
     "import_failed": "No se pudo importar el producto",
-    "stock_failed": "El producto se importó, pero no se pudo registrar el stock de apertura"
+    "stock_failed": "El producto se importó, pero no se pudo registrar el stock de apertura",
+    "concurrent_update": "El producto cambió mientras se ejecutaba la importación; vuelve a validar el archivo"
   },
   "boolean": {
     "yes": "Sí",
@@ -129,7 +142,17 @@
     "noIssues": "Sin novedades",
     "emptyValue": "—",
     "issueFormat": "{{field}}: {{issue}}",
-    "previewLimit": "Se muestran las primeras 100 de {{count}} filas. El resumen y la importación incluyen todas las filas."
+    "previewLimit": "Se muestran las primeras 100 de {{count}} filas. El resumen y la importación incluyen todas las filas.",
+    "change": "Cambio",
+    "newProduct": "Producto nuevo",
+    "noChanges": "Sin cambios",
+    "costChange": "Costo {{from}} → {{to}} ({{percent}})",
+    "priceChange": "Precio {{from}} → {{to}}",
+    "taxChange": "Impuesto {{from}}% → {{to}}%",
+    "filter": "Mostrar",
+    "filterAll": "Todas las filas ({{count}})",
+    "filterStatus": "{{status}} ({{count}})",
+    "filteredLimit": "Se muestran las primeras 100 de {{count}} filas con este filtro."
   },
   "report": {
     "kicker": "Completada",
@@ -144,7 +167,9 @@
       "importedWithWarnings": "Importada con novedades",
       "failed": "Fallida",
       "skipped": "Omitida",
-      "invalid": "Inválida"
+      "invalid": "Inválida",
+      "updated": "Actualizada",
+      "unchanged": "Sin cambios"
     },
     "boolean": {
       "yes": "Sí",
@@ -156,8 +181,11 @@
       "skipped": "Omitidos",
       "invalid": "Inválidos",
       "failed": "Fallidos",
-      "warnings": "Novedades"
-    }
+      "warnings": "Novedades",
+      "updated": "Actualizados",
+      "unchanged": "Sin cambios"
+    },
+    "descriptionUpsert": "Productos creados: {{imported}}. Productos actualizados: {{updated}}. Sin cambios: {{unchanged}}."
   },
   "template": {
     "sampleName": "Café de ejemplo",
@@ -173,13 +201,16 @@
     "too_many_columns": "El archivo supera el límite de 50 columnas.",
     "row_too_wide": "Una fila de datos contiene más valores que la fila de encabezados.",
     "malformed_csv": "El CSV contiene un valor entre comillas incompleto o no válido.",
-    "workbook_empty": "El libro de Excel no contiene una hoja de cálculo."
+    "workbook_empty": "El libro de Excel no contiene una hoja de cálculo.",
+    "unsupported_workbook": "Elige un archivo .csv, .xlsx o .xls.",
+    "too_many_workbook_rows": "Importa máximo 20.000 filas a la vez."
   },
   "toast": {
     "previewError": "No se pudo validar el archivo",
     "importError": "No se pudo completar la importación",
     "imported_one": "{{count}} producto importado",
-    "imported_other": "{{count}} productos importados"
+    "imported_other": "{{count}} productos importados",
+    "importedUpsert": "Importación aplicada: {{imported}} creados, {{updated}} actualizados"
   },
   "entitySelector": {
     "label": "Elige los datos que deseas importar"
@@ -426,5 +457,36 @@
       "siigo-products-es-v1": "Huella probada: Código producto, Nombre producto, Precio de venta, Costo, Existencia, Impuesto cargo y Unidad de medida.",
       "world-office-inventory-es-v1": "Huella probada: Código artículo, Descripción artículo, Precio venta, Costo promedio, Existencia, Porcentaje IVA y Unidad."
     }
+  },
+  "source": {
+    "kicker": "Opciones del archivo",
+    "title": "Hoja, encabezados y modo",
+    "description": "Puntovivo detectó la hoja y la fila de encabezados más probables. Corrígelas si el archivo tiene títulos, notas o varias hojas.",
+    "sheet": "Hoja de cálculo",
+    "hiddenSheet": "{{name}} (oculta)",
+    "sheetRows": "{{name}} · {{count}} filas",
+    "headerRow": "Fila de encabezados",
+    "headerRowOption": "Fila {{row}}: {{preview}}",
+    "importMode": "Modo de importación",
+    "modes": {
+      "create": {
+        "label": "Crear productos nuevos",
+        "description": "Crea los productos cuyo código no existe y omite los que ya están en el catálogo."
+      },
+      "upsert": {
+        "label": "Lista de proveedor: crear y actualizar",
+        "description": "Crea los productos nuevos y actualiza el costo y el impuesto (y el precio de venta si asignas una columna) de los que ya existen."
+      }
+    },
+    "skuPrefix": "Prefijo de código",
+    "skuPrefixPlaceholder": "Ej. FOX-",
+    "skuPrefixHelp": "Se antepone al código de cada fila para que no se mezclen códigos de distintos proveedores.",
+    "defaultTaxRate": "Impuesto por defecto (%)",
+    "defaultTaxRatePlaceholder": "Ej. 21",
+    "defaultTaxRateHelp": "Se aplica a las filas sin columna o sin valor de impuesto."
+  },
+  "preview": {
+    "zeroPriceWarning_one": "{{count}} producto nuevo quedará con precio de venta 0. Cárgalo antes de venderlo.",
+    "zeroPriceWarning_other": "{{count}} productos nuevos quedarán con precio de venta 0. Cárgalo antes de venderlos."
   }
 }

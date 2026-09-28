@@ -105,7 +105,7 @@ function detectDelimiter(text: string): ',' | ';' | '\t' {
   );
 }
 
-export function parseCsvText(text: string, sourceName = 'import.csv'): ParsedImportFile {
+function csvTextToMatrix(text: string): string[][] {
   const clean = text.replace(/^\uFEFF/, '');
   if (!clean.trim()) throw new ImportFileError('empty_file');
   const delimiter = detectDelimiter(clean);
@@ -155,7 +155,11 @@ export function parseCsvText(text: string, sourceName = 'import.csv'): ParsedImp
     row.push(cell);
     matrix.push(row);
   }
-  return buildRows(sourceName, matrix);
+  return matrix;
+}
+
+export function parseCsvText(text: string, sourceName = 'import.csv'): ParsedImportFile {
+  return buildRows(sourceName, csvTextToMatrix(text));
 }
 
 function spreadsheetValueToString(value: unknown): string {
@@ -219,4 +223,230 @@ export async function parseImportFile(file: File): Promise<ParsedImportFile> {
   if (extension === 'csv') return parseCsvText(await file.text(), file.name);
   if (extension === 'xlsx') return parseXlsxFile(file);
   throw new ImportFileError('unsupported_file');
+}
+
+// ---------------------------------------------------------------------------
+// Multi-sheet workbook reader for supplier price lists. Unlike
+// `parseImportFile`, the header row is not assumed to be row 1: callers pick
+// the worksheet and header row (usually through `detectHeaderRowIndex`) and
+// then build a `ParsedImportFile` with `buildSheetImportFile`.
+// ---------------------------------------------------------------------------
+
+/** Upper bound for a whole workbook import; the server still receives 500-row batches. */
+export const MAX_WORKBOOK_IMPORT_ROWS = 20_000;
+/** Rows scanned from the top of a sheet when looking for the header row. */
+export const HEADER_SCAN_ROWS = 200;
+
+export interface ImportSheet {
+  name: string;
+  hidden: boolean;
+  /** Non-empty source rows, each truncated to `MAX_IMPORT_COLUMNS` cells. */
+  cells: string[][];
+  /** 1-based spreadsheet row number for each entry of `cells`. */
+  rowNumbers: number[];
+}
+
+export interface ImportWorkbook {
+  sourceName: string;
+  sheets: ImportSheet[];
+}
+
+function collapseWhitespace(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Spreadsheet numbers arrive as IEEE doubles (`255.09060000000002`). Round
+ * to 15 significant digits so the text the server parses is the value the
+ * operator saw in Excel.
+ */
+function workbookValueToString(value: unknown): string {
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return '';
+    return Number.isInteger(value) ? String(value) : String(Number(value.toPrecision(15)));
+  }
+  if (value && typeof value === 'object' && !(value instanceof Date)) {
+    const record = value as Record<string, unknown>;
+    if ('formula' in record || 'sharedFormula' in record) {
+      return workbookValueToString(record.result);
+    }
+  }
+  return spreadsheetValueToString(value);
+}
+
+function pushSheetRow(sheet: ImportSheet, rowNumber: number, values: readonly unknown[]): void {
+  const cells = values.slice(0, MAX_IMPORT_COLUMNS).map(workbookValueToString);
+  while (cells.length > 0 && cells.at(-1)!.trim() === '') cells.pop();
+  if (cells.length === 0) return;
+  if (sheet.cells.length >= MAX_WORKBOOK_IMPORT_ROWS + HEADER_SCAN_ROWS) {
+    throw new ImportFileError('too_many_rows');
+  }
+  sheet.cells.push(cells);
+  sheet.rowNumbers.push(rowNumber);
+}
+
+async function readXlsxWorkbook(file: File): Promise<ImportSheet[]> {
+  const { default: ExcelJS } = await import('exceljs/dist/exceljs.bare.min.js');
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(await file.arrayBuffer());
+  return workbook.worksheets.map(worksheet => {
+    const sheet: ImportSheet = {
+      name: worksheet.name,
+      hidden: worksheet.state !== undefined && worksheet.state !== 'visible',
+      cells: [],
+      rowNumbers: [],
+    };
+    worksheet.eachRow({ includeEmpty: false }, row => {
+      const values: unknown[] = [];
+      for (let index = 1; index <= Math.min(row.cellCount, MAX_IMPORT_COLUMNS); index += 1) {
+        const cell = row.getCell(index);
+        // ExcelJS repeats a merged value in every covered cell; keep it only
+        // in the master cell so a merged title does not look like a header.
+        if (cell.isMerged && cell.master.address !== cell.address) {
+          values.push('');
+          continue;
+        }
+        values.push(cell.value);
+      }
+      pushSheetRow(sheet, row.number, values);
+    });
+    return sheet;
+  });
+}
+
+async function readXlsWorkbook(file: File): Promise<ImportSheet[]> {
+  // Legacy BIFF (.xls) files need SheetJS; load it only for that format.
+  const XLSX = await import('xlsx');
+  const workbook = XLSX.read(new Uint8Array(await file.arrayBuffer()), {
+    type: 'array',
+    cellFormula: false,
+    cellHTML: false,
+    cellStyles: false,
+    cellDates: false,
+  });
+  const sheetMeta = workbook.Workbook?.Sheets ?? [];
+  return workbook.SheetNames.map((name, sheetIndex) => {
+    const worksheet = workbook.Sheets[name];
+    const sheet: ImportSheet = {
+      name,
+      hidden: Boolean(sheetMeta[sheetIndex]?.Hidden),
+      cells: [],
+      rowNumbers: [],
+    };
+    if (!worksheet || !worksheet['!ref']) return sheet;
+    const range = XLSX.utils.decode_range(worksheet['!ref']);
+    const rows = XLSX.utils.sheet_to_json<unknown[]>(worksheet, {
+      header: 1,
+      raw: true,
+      defval: '',
+      blankrows: true,
+    });
+    const firstColumnPadding = Array.from({ length: range.s.c }, () => '');
+    rows.forEach((values, index) => {
+      pushSheetRow(sheet, range.s.r + index + 1, [...firstColumnPadding, ...values]);
+    });
+    return sheet;
+  });
+}
+
+function readCsvWorkbook(text: string): ImportSheet[] {
+  const sheet: ImportSheet = { name: '', hidden: false, cells: [], rowNumbers: [] };
+  csvTextToMatrix(text).forEach((values, index) => pushSheetRow(sheet, index + 1, values));
+  return [sheet];
+}
+
+/** Read every worksheet of a CSV, XLSX, or legacy XLS file without assuming a header row. */
+export async function readImportWorkbook(file: File): Promise<ImportWorkbook> {
+  if (file.size > MAX_IMPORT_FILE_BYTES) throw new ImportFileError('file_too_large');
+  const extension = file.name.split('.').at(-1)?.toLocaleLowerCase();
+  let sheets: ImportSheet[];
+  if (extension === 'csv') sheets = readCsvWorkbook(await file.text());
+  else if (extension === 'xlsx') sheets = await readXlsxWorkbook(file);
+  else if (extension === 'xls') sheets = await readXlsWorkbook(file);
+  else throw new ImportFileError('unsupported_file');
+  if (sheets.length === 0) throw new ImportFileError('workbook_empty');
+  if (sheets.every(sheet => sheet.cells.length === 0)) throw new ImportFileError('empty_file');
+  return { sourceName: file.name, sheets };
+}
+
+/**
+ * Pick the header row among the first `HEADER_SCAN_ROWS` rows: the row with
+ * the highest `scoreRow` result wins (earliest on ties). Returns 0 when no
+ * row scores at least `minimumScore`.
+ */
+export function detectHeaderRowIndex(
+  sheet: ImportSheet,
+  scoreRow: (cells: string[]) => number,
+  minimumScore = 2
+): number {
+  let bestIndex = 0;
+  let bestScore = minimumScore - 1;
+  const limit = Math.min(sheet.cells.length, HEADER_SCAN_ROWS);
+  for (let index = 0; index < limit; index += 1) {
+    const score = scoreRow(sheet.cells[index]!);
+    if (score > bestScore) {
+      bestScore = score;
+      bestIndex = index;
+    }
+  }
+  return bestIndex;
+}
+
+function headerKey(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('en-US');
+}
+
+/**
+ * Build a `ParsedImportFile` from one worksheet using `headerIndex` (an index
+ * into `sheet.cells`) as the header row. Columns without a header are ignored,
+ * repeated headers get a numeric suffix, and rows that repeat the header
+ * (page breaks in exported price lists) are skipped.
+ */
+export function buildSheetImportFile(
+  sourceName: string,
+  sheet: ImportSheet,
+  headerIndex: number
+): ParsedImportFile {
+  const headerCells = sheet.cells[headerIndex];
+  if (!headerCells) throw new ImportFileError('empty_file');
+  const columns: Array<{ index: number; header: string }> = [];
+  const seen = new Map<string, number>();
+  headerCells.forEach((raw, index) => {
+    const header = collapseWhitespace(raw);
+    if (!header) return;
+    const key = headerKey(header);
+    const count = (seen.get(key) ?? 0) + 1;
+    seen.set(key, count);
+    columns.push({ index, header: count === 1 ? header : `${header} (${count})` });
+  });
+  if (columns.length === 0) throw new ImportFileError('empty_header');
+
+  const headerSignature = columns.map(column =>
+    headerKey(collapseWhitespace(headerCells[column.index]!))
+  );
+  const rows: ParsedImportRow[] = [];
+  for (let index = headerIndex + 1; index < sheet.cells.length; index += 1) {
+    const cells = sheet.cells[index]!;
+    const values = columns.map(column => (cells[column.index] ?? '').trim());
+    if (values.every(value => value.length === 0)) continue;
+    if (
+      values.every(
+        (value, position) => headerKey(collapseWhitespace(value)) === headerSignature[position]
+      )
+    ) {
+      continue;
+    }
+    rows.push({
+      rowNumber: sheet.rowNumbers[index] ?? index + 1,
+      values: Object.fromEntries(
+        columns.map((column, position) => [column.header, values[position]!])
+      ),
+    });
+  }
+  if (rows.length === 0) throw new ImportFileError('empty_file');
+  if (rows.length > MAX_WORKBOOK_IMPORT_ROWS) throw new ImportFileError('too_many_rows');
+  return { sourceName, headers: columns.map(column => column.header), rows };
 }

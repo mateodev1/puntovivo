@@ -47,6 +47,7 @@ export type ProductImportIssueCode =
   | 'duplicate_file_barcode'
   | 'duplicate_existing_barcode'
   | 'concurrent_duplicate'
+  | 'concurrent_update'
   | 'import_failed'
   | 'stock_failed';
 
@@ -73,13 +74,37 @@ export interface NormalizedLaunchProduct {
   tracksLots: boolean;
 }
 
-export type ProductImportPreviewStatus = 'ready' | 'invalid' | 'duplicate';
+/**
+ * `update` and `unchanged` only appear in `upsert` mode: the SKU matches an
+ * existing product whose cost, price, or tax the file changes (or not).
+ */
+export type ProductImportPreviewStatus = 'ready' | 'invalid' | 'duplicate' | 'update' | 'unchanged';
+
+/** Current catalog values of the product an `update`/`unchanged` row targets. */
+export interface ProductImportExistingProduct {
+  productId: string;
+  version: number;
+  name: string;
+  cost: number;
+  price: number;
+  taxRate: number;
+}
+
+/** Fields an `update` row will write; absent keys keep the stored value. */
+export interface ProductImportChanges {
+  cost?: number;
+  price?: number;
+  taxRate?: number;
+  vatRateId?: string | null;
+}
 
 export interface ProductImportPreviewRow {
   rowNumber: number;
   status: ProductImportPreviewStatus;
   normalized: NormalizedLaunchProduct;
   issues: ProductImportIssue[];
+  existing?: ProductImportExistingProduct;
+  changes?: ProductImportChanges;
 }
 
 export const CUSTOMER_IMPORT_FIELDS = [

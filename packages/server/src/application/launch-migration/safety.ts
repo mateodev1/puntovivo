@@ -4,10 +4,11 @@ import { TRPCError } from '@trpc/server';
 const SAFE_ERROR_CODE = /^[A-Z][A-Z0-9_]{0,63}$/;
 const SAFE_ERROR_TYPE = /^[A-Za-z][A-Za-z0-9]{0,63}$/;
 
-export function getImportSourceFormat(sourceName: string): 'csv' | 'xlsx' | 'unknown' {
+export function getImportSourceFormat(sourceName: string): 'csv' | 'xlsx' | 'xls' | 'unknown' {
   const normalized = sourceName.trim().toLocaleLowerCase('en-US');
   if (normalized.endsWith('.csv')) return 'csv';
   if (normalized.endsWith('.xlsx')) return 'xlsx';
+  if (normalized.endsWith('.xls')) return 'xls';
   return 'unknown';
 }
 

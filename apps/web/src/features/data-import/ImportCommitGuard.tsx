@@ -10,6 +10,8 @@ interface ImportCommitGuardProps {
   onConfirm: (confirmed: boolean) => void;
   onImport: () => void;
   ready: number;
+  importingLabel?: string | undefined;
+  readyLabel?: string | undefined;
 }
 export function ImportCommitGuard({
   completed,
@@ -19,6 +21,8 @@ export function ImportCommitGuard({
   onConfirm,
   onImport,
   ready,
+  importingLabel,
+  readyLabel,
 }: ImportCommitGuardProps) {
   const { t } = useTranslation('dataImport');
   if (dataMode === 'demo') {
@@ -53,12 +57,13 @@ export function ImportCommitGuard({
         variant="primary"
       >
         {importing
-          ? t('actions.importing')
+          ? (importingLabel ?? t('actions.importing'))
           : completed
             ? t('actions.completed')
-            : t('actions.importReady', {
+            : (readyLabel ??
+              t('actions.importReady', {
                 count: ready,
-              })}
+              }))}
       </Button>
     </div>
   );

@@ -1,13 +1,23 @@
 import { CheckCircle2, Download } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import type { ProductImportMode } from './productImportSource';
 import type { ProductImportReport } from './types';
 import { Button } from '@/components/ui';
 interface ProductImportReportProps {
   report: ProductImportReport;
+  importMode?: ProductImportMode;
   onDownloadReport: () => void;
 }
-export function ProductImportReportPanel({ report, onDownloadReport }: ProductImportReportProps) {
+export function ProductImportReportPanel({
+  report,
+  importMode = 'create',
+  onDownloadReport,
+}: ProductImportReportProps) {
   const { t } = useTranslation('dataImport');
+  const upsert = importMode === 'upsert';
+  const metrics = upsert
+    ? (['imported', 'updated', 'unchanged', 'skipped', 'invalid', 'failed'] as const)
+    : (['imported', 'stockInitialized', 'skipped', 'invalid', 'failed', 'warnings'] as const);
   return (
     <section
       className="card border-success-200 bg-success-50/40 p-6"
@@ -30,10 +40,16 @@ export function ProductImportReportPanel({ report, onDownloadReport }: ProductIm
               {t('report.title')}
             </h2>
             <p className="mt-1 text-sm text-secondary-600">
-              {t('report.description', {
-                imported: report.summary.imported,
-                stock: report.summary.stockInitialized,
-              })}
+              {upsert
+                ? t('report.descriptionUpsert', {
+                    imported: report.summary.imported,
+                    updated: report.summary.updated,
+                    unchanged: report.summary.unchanged,
+                  })
+                : t('report.description', {
+                    imported: report.summary.imported,
+                    stock: report.summary.stockInitialized,
+                  })}
             </p>
             <p className="mt-2 text-xs text-secondary-500">
               {t('report.importId')}{' '}
@@ -47,9 +63,7 @@ export function ProductImportReportPanel({ report, onDownloadReport }: ProductIm
         </Button>
       </div>
       <dl className="mt-5 grid gap-3 sm:grid-cols-3 xl:grid-cols-6">
-        {(
-          ['imported', 'stockInitialized', 'skipped', 'invalid', 'failed', 'warnings'] as const
-        ).map(key => (
+        {metrics.map(key => (
           <div
             key={key}
             className="rounded-lg border border-success-200/70 bg-white p-3"
