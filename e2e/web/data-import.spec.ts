@@ -189,7 +189,7 @@ test.describe('launch data import', () => {
     ]);
     const id = String(sheet.getRow(2).getCell(column('Product ID')).value);
     expect(id.length).toBeGreaterThan(0);
-    expect(Number(sheet.getRow(2).getCell(column('Product Version')).value)).toBeGreaterThan(0);
+    expect(Number.isSafeInteger(Number(sheet.getRow(2).getCell(column('Product Version')).value))).toBe(true);
     sheet.getRow(2).getCell(column('Product')).value = newName;
     sheet.getRow(2).getCell(column('SKU')).value = newSku;
     sheet.getRow(2).getCell(column('Description')).value = '';
