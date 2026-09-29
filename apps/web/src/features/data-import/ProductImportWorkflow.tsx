@@ -14,6 +14,7 @@ import {
 } from './fileParser';
 import { ImportSourcePanel } from './ImportSourcePanel';
 import {
+  autoMapProductHeaders,
   hasRequiredProductMapping,
   mapProductImportRows,
   type ProductImportField,
@@ -32,6 +33,7 @@ import {
   buildProductImportFile,
   chunkRows,
   detectProductHeaderIndex,
+  isEditableProductExport,
   selectProductImportSheet,
   withNameFallback,
   type ProductImportMode,
@@ -161,6 +163,13 @@ export function ProductImportWorkflow({ dataMode, onBusyChange }: ProductImportW
   };
   const remap = (headers: string[], mode: ProductImportMode) => {
     if (mode === 'upsert') {
+      if (isEditableProductExport(headers)) {
+        setProfileId('generic');
+        setDetectedProfileId('generic');
+        setMapping(autoMapProductHeaders(headers));
+        setCostCandidates([]);
+        return;
+      }
       const supplier = autoMapSupplierHeaders(headers);
       setProfileId('generic');
       setDetectedProfileId('generic');
@@ -210,7 +219,8 @@ export function ProductImportWorkflow({ dataMode, onBusyChange }: ProductImportW
       // Titles or notes above the header row are typical of supplier price
       // lists rather than POS exports, so suggest the supplier-list mode.
       const suggestedMode: ProductImportMode =
-        candidate.headerIndex > 0 && detectProductImportProfile(parsed.headers) === 'generic'
+        isEditableProductExport(parsed.headers) ||
+        (candidate.headerIndex > 0 && detectProductImportProfile(parsed.headers) === 'generic')
           ? 'upsert'
           : 'create';
       setWorkbook(source);
