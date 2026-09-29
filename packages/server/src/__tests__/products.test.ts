@@ -263,6 +263,50 @@ describe('Products tRPC Router', () => {
     expect(listed.items.map(item => item.id)).not.toContain(decoy.id);
   });
 
+  it('searches description and SKU across the catalog and pages literal SKU prefixes', async () => {
+    const caller = appRouter.createCaller(createTestContext());
+    const marker = nanoid(8);
+    const prefix = `fox_${marker}-`;
+    const first = await caller.products.create({
+      name: 'Widget alpha',
+      sku: `${prefix}01`,
+      description: `Special ${marker} description`,
+      price: 10,
+      stock: 0,
+    });
+    const second = await caller.products.create({
+      name: 'Widget beta',
+      sku: `${prefix}02`,
+      price: 10,
+      stock: 0,
+    });
+    await caller.products.create({
+      name: 'Widget decoy',
+      sku: `foxX${marker}-03`,
+      price: 10,
+      stock: 0,
+    });
+    const byDescription = await caller.products.list({ page: 1, perPage: 20, search: marker });
+    expect(byDescription.items.map(item => item.id)).toContain(first.id);
+    const pageOne = await caller.products.list({ page: 1, perPage: 1, skuPrefix: prefix });
+    const pageTwo = await caller.products.list({ page: 2, perPage: 1, skuPrefix: prefix });
+    expect(pageOne.totalItems).toBe(2);
+    expect([pageOne.items[0]?.id, pageTwo.items[0]?.id]).toEqual([first.id, second.id]);
+    expect(
+      (
+        await caller.products.list({
+          page: 1,
+          perPage: 20,
+          skuPrefix: `${prefix}02`,
+          search: 'beta',
+        })
+      ).items.map(item => item.id)
+    ).toEqual([second.id]);
+    await expect(
+      caller.products.list({ page: 1, perPage: 20, skuPrefix: 'x'.repeat(101) })
+    ).rejects.toThrow();
+  });
+
   it('creates, lists, updates, and soft deletes products with normalized pricing', async () => {
     const caller = appRouter.createCaller(createTestContext());
 
