@@ -12,6 +12,16 @@ import {
 import { COMMAND_ENVELOPE_HEADER, DEVICE_ID_HEADER } from '../commandEnvelope';
 import { clearStoredSiteId, persistSiteId } from '@/features/tenant/siteStorage';
 
+const { localMode, localRefresh } = vi.hoisted(() => ({
+  localMode: vi.fn(() => false),
+  localRefresh: vi.fn(),
+}));
+
+vi.mock('@/features/auth/localDesktopAuthTransport', () => ({
+  isPackagedLocalAuth: localMode,
+  refreshLocal: localRefresh,
+}));
+
 describe('trpc site header', () => {
   const stored = new Map<string, string>();
 
@@ -63,6 +73,8 @@ describe('trpc site header', () => {
 describe('trpc auth transport', () => {
   beforeEach(() => {
     clearAccessToken();
+    localMode.mockReturnValue(false);
+    localRefresh.mockReset();
     setAuthSessionExpiredHandler(null);
     Object.defineProperty(window, 'localStorage', {
       configurable: true,
@@ -274,6 +286,58 @@ describe('trpc auth transport', () => {
     expect(retryHeaders.get('authorization')).toBe('Bearer fresh-access-token');
     expect(getTrpcHeaders().authorization).toBe('Bearer fresh-access-token');
   });
+
+  it('renews a packaged desktop token in Electron main instead of posting cookie-based refresh', async () => {
+    localMode.mockReturnValue(true);
+    localRefresh.mockResolvedValue({ token: 'rotated-local-token' });
+    setAccessToken('expired-local-token');
+    const register = vi.fn().mockResolvedValue({ ok: true });
+    Object.defineProperty(window, 'api', { configurable: true, value: { session: { register } } });
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response('{}', { status: 401 }))
+      .mockResolvedValueOnce(new Response('{}', { status: 200 }));
+
+    const response = await createTrpcFetch(fetchMock)('http://localhost:8090/api/trpc/auth.me', {
+      headers: { authorization: 'Bearer expired-local-token' },
+    });
+
+    expect(response.status).toBe(200);
+    expect(localRefresh).toHaveBeenCalledOnce();
+    expect(register).toHaveBeenCalledWith('rotated-local-token');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(new Headers(fetchMock.mock.calls[1]?.[1]?.headers).get('authorization')).toBe(
+      'Bearer rotated-local-token'
+    );
+  });
+
+  it.each([
+    { status: 401, expires: true },
+    { status: 503, expires: false },
+  ])(
+    'treats a packaged desktop refresh $status as revoked only when unauthorized',
+    async ({ status, expires }) => {
+      localMode.mockReturnValue(true);
+      localRefresh.mockRejectedValue(
+        Object.assign(new Error('Local refresh failed'), {
+          data: { httpStatus: status },
+        })
+      );
+      setAccessToken('old-local-token');
+      const onExpired = vi.fn();
+      setAuthSessionExpiredHandler(onExpired);
+      const fetchMock = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(new Response('{}', { status: 401 }));
+      const operation = createTrpcFetch(fetchMock)('http://localhost:8090/api/trpc/auth.me');
+
+      if (expires) expect((await operation).status).toBe(401);
+      else await expect(operation).rejects.toThrow('Local refresh failed');
+      expect(onExpired).toHaveBeenCalledTimes(expires ? 1 : 0);
+      expect(getTrpcHeaders().authorization).toBe(expires ? undefined : 'Bearer old-local-token');
+      expect(fetchMock).toHaveBeenCalledOnce();
+    }
+  );
 
   it('clears the local access token and notifies the session handler when refresh fails', async () => {
     setAccessToken('expired-access-token');

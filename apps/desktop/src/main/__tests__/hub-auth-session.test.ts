@@ -12,6 +12,7 @@ import {
   normalizeHubAuthUrl,
   type HubRealtimeMessage,
 } from '../session/hub-auth-session.ts';
+import { createLocalAuthFetch } from '../session/local-auth-fetch.ts';
 import type { SafeStorageLike } from '../db-key-store.ts';
 
 const tempDirs: string[] = [];
@@ -581,9 +582,8 @@ describe('Store Hub main-process auth custody', () => {
     );
   });
 
-  it('renews against the real Fastify tRPC and rotating-cookie contract', async () => {
+  it('renews Hub and packaged-local credentials against the real Fastify cookie contract', async () => {
     const server = await createServer({ dbPath: ':memory:', verbose: false });
-    const statePath = tempStatePath();
     let lastRequestHeaders: Record<string, string> = {};
     const injectFetch = (async (input: string | URL | Request, init?: RequestInit) => {
       const url = new URL(String(input));
@@ -606,48 +606,70 @@ describe('Store Hub main-process auth custody', () => {
       return new Response(response.body, { status: response.statusCode, headers });
     }) as typeof fetch;
 
+    const localFetch = createLocalAuthFetch(() => server, 'http://127.0.0.1:8090');
     try {
-      const first = createHubAuthSession({
-        hubUrl: 'https://hub.example.test',
-        getStatePath: () => statePath,
-        safeStorage,
-        fetchImpl: injectFetch,
-      });
-      const login = await first.login({
-        email: 'admin@localhost',
-        password: 'Admin123!Dev',
-      });
-      assert.match(login.token, /^[^.]+\.[^.]+\.[^.]+$/);
-      const firstRefreshCredential = JSON.parse(safeStorage.decryptString(readFileSync(statePath)))
-        .refreshToken as string;
+      for (const hubUrl of ['https://hub.example.test', 'http://127.0.0.1:8090']) {
+        const statePath = tempStatePath();
+        const fetchImpl = hubUrl.startsWith('http:') ? localFetch : injectFetch;
+        const first = createHubAuthSession({
+          hubUrl,
+          getStatePath: () => statePath,
+          safeStorage,
+          fetchImpl,
+          allowInsecureLoopback: true,
+        });
+        const login = await first.login({
+          email: 'admin@localhost',
+          password: 'Admin123!Dev',
+        });
+        assert.match(login.token, /^[^.]+\.[^.]+\.[^.]+$/);
+        const firstRefreshCredential = JSON.parse(
+          safeStorage.decryptString(readFileSync(statePath))
+        ).refreshToken as string;
 
-      const restarted = createHubAuthSession({
-        hubUrl: 'https://hub.example.test',
-        getStatePath: () => statePath,
-        safeStorage,
-        fetchImpl: injectFetch,
-      });
-      const renewed = await restarted.refresh();
-      const rotatedRefreshCredential = JSON.parse(
-        safeStorage.decryptString(readFileSync(statePath))
-      ).refreshToken as string;
-      assert.notEqual(rotatedRefreshCredential, firstRefreshCredential);
-      assert.equal((await restarted.verifyAccessToken(renewed.token))?.email, 'admin@localhost');
-      const proxied = await restarted.request({
-        path: '/api/trpc/auth.me?batch=1&input=%7B%7D',
-        method: 'GET',
-        headers: {
-          authorization: `Bearer ${renewed.token}`,
-          cookie: 'renderer-cookie-must-not-cross',
-          'x-correlation-id': 'hub-proxy-test',
-        },
-      });
-      assert.equal(proxied.status, 200);
-      assert.equal(lastRequestHeaders.cookie, undefined);
-      assert.equal(lastRequestHeaders['x-correlation-id'], 'hub-proxy-test');
+        const restarted = createHubAuthSession({
+          hubUrl,
+          getStatePath: () => statePath,
+          safeStorage,
+          fetchImpl,
+          allowInsecureLoopback: true,
+        });
+        const renewed = await restarted.refresh();
+        const rotatedRefreshCredential = JSON.parse(
+          safeStorage.decryptString(readFileSync(statePath))
+        ).refreshToken as string;
+        assert.notEqual(rotatedRefreshCredential, firstRefreshCredential);
+        assert.equal((await restarted.verifyAccessToken(renewed.token))?.email, 'admin@localhost');
+        if (hubUrl.startsWith('https:')) {
+          const proxied = await restarted.request({
+            path: '/api/trpc/auth.me?batch=1&input=%7B%7D',
+            method: 'GET',
+            headers: {
+              authorization: `Bearer ${renewed.token}`,
+              cookie: 'renderer-cookie-must-not-cross',
+              'x-correlation-id': 'hub-proxy-test',
+            },
+          });
+          assert.equal(proxied.status, 200);
+          assert.equal(lastRequestHeaders.cookie, undefined);
+          assert.equal(lastRequestHeaders['x-correlation-id'], 'hub-proxy-test');
+        } else {
+          await restarted.logout();
+          assert.equal(existsSync(statePath), false);
+        }
+        await assert.rejects(
+          restarted.request({ path: '/api/../admin', method: 'GET', headers: {} }),
+          /escaped the configured hub/
+        );
+      }
+      await assert.rejects(localFetch('http://127.0.0.1:8090/api/trpc/users.list'), /not allowed/);
+      await assert.rejects(localFetch('http://evil.example/api/trpc/auth.refresh'), /not allowed/);
       await assert.rejects(
-        restarted.request({ path: '/api/../admin', method: 'GET', headers: {} }),
-        /escaped the configured hub/
+        createLocalAuthFetch(() => null, 'http://127.0.0.1:8090')(
+          'http://127.0.0.1:8090/api/trpc/auth.refresh',
+          { method: 'POST' }
+        ),
+        /embedded server is not available/
       );
     } finally {
       await server.close();

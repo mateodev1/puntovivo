@@ -7,6 +7,12 @@ const authMock = vi.hoisted(() => ({
   error: null as unknown,
   login: vi.fn(),
 }));
+const lastEmailMock = vi.hoisted(() => vi.fn(() => ''));
+
+vi.mock('./authStorage', async () => ({
+  ...(await vi.importActual<typeof import('./authStorage')>('./authStorage')),
+  getLastDesktopLoginEmail: lastEmailMock,
+}));
 
 vi.mock('./AuthProvider', () => ({
   useAuth: () => ({
@@ -23,6 +29,15 @@ vi.mock('@/lib/trpc', () => ({
 }));
 
 import { LoginPage } from './LoginPage';
+
+it('prefills the last desktop email but leaves the password blank', () => {
+  authMock.error = null;
+  lastEmailMock.mockReturnValue('last@example.com');
+  render(<LoginPage />);
+  expect(screen.getByLabelText(/email|correo/i)).toHaveValue('last@example.com');
+  expect(document.querySelector('#password')).toHaveValue('');
+  lastEmailMock.mockReturnValue('');
+});
 
 describe('LoginPage Store Hub errors', () => {
   beforeEach(() => {

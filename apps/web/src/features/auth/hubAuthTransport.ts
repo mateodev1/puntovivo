@@ -14,7 +14,7 @@ export function createHubApiFetch(): typeof fetch {
   };
 }
 
-function unwrapHubResult<T>(result: HubAuthIpcResult<T>): T {
+export function unwrapHubResult<T>(result: HubAuthIpcResult<T>): T {
   if (result.ok) return result.data;
   const error = new Error(result.error.message) as Error & {
     data?: { errorCode?: string; code?: string; httpStatus?: number };

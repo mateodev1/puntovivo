@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   clearAuthSession,
   requireExplicitSignIn,
@@ -7,6 +7,8 @@ import {
   getStoredAuthTenant,
   getStoredAuthTenantId,
   persistAuthSession,
+  getLastDesktopLoginEmail,
+  rememberLastDesktopLoginEmail,
 } from './authStorage';
 
 const tenant = {
@@ -106,6 +108,49 @@ describe('clearAuthSession', () => {
 
   it('is a no-op when nothing is stored (does not throw)', () => {
     expect(() => clearAuthSession()).not.toThrow();
+  });
+});
+
+describe('packaged desktop login email preference', () => {
+  it('remembers only a verified email across logout and replaces it for the next operator', () => {
+    const storage = window.localStorage;
+    vi.stubGlobal('window', { location: { protocol: 'puntovivo-app:' }, localStorage: storage });
+    try {
+      rememberLastDesktopLoginEmail('first@example.com');
+      clearAuthSession();
+      expect(getLastDesktopLoginEmail()).toBe('first@example.com');
+      rememberLastDesktopLoginEmail('second@example.com');
+      expect(getLastDesktopLoginEmail()).toBe('second@example.com');
+      expect(storage.getItem('auth_user')).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('does not persist the preference in the browser', () => {
+    rememberLastDesktopLoginEmail('browser@example.com');
+    expect(getLastDesktopLoginEmail()).toBe('');
+    expect(window.localStorage.length).toBe(0);
+  });
+
+  it('does not interrupt login if desktop preference storage is unavailable', () => {
+    vi.stubGlobal('window', {
+      location: { protocol: 'puntovivo-app:' },
+      localStorage: {
+        getItem: () => {
+          throw new Error('storage unavailable');
+        },
+        setItem: () => {
+          throw new Error('storage unavailable');
+        },
+      },
+    });
+    try {
+      expect(getLastDesktopLoginEmail()).toBe('');
+      expect(() => rememberLastDesktopLoginEmail('admin@example.com')).not.toThrow();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 

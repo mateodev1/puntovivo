@@ -17,6 +17,7 @@ import {
   isHubClientAuth,
   refreshHubSession,
 } from '@/features/auth/hubAuthTransport';
+import { isPackagedLocalAuth, refreshLocal } from '@/features/auth/localDesktopAuthTransport';
 
 // `API_URL` is resolved through the runtime config client
 // at module init. In `hub_client` mode the renderer points at the
@@ -181,9 +182,9 @@ async function requestAccessTokenRefresh(
   const controller = new AbortController();
 
   const promise = (async () => {
-    if (isHubClientAuth()) {
+    if (isHubClientAuth() || isPackagedLocalAuth()) {
       try {
-        const result = await refreshHubSession();
+        const result = isHubClientAuth() ? await refreshHubSession() : await refreshLocal();
         if (!isCurrent()) return null;
         accessToken = result.token;
         await window.api?.session?.register?.(result.token);

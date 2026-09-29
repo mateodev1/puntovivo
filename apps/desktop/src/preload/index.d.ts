@@ -283,6 +283,17 @@ interface SessionAPI {
   register: (accessToken: string) => Promise<{ ok: true }>;
   resume: () => Promise<{ token: string | null }>;
   clear: () => Promise<{ ok: true }>;
+  loginLocal: (input: {
+    email: string;
+    password: string;
+  }) => Promise<HubAuthIpcResult<HubAccessGrant>>;
+  refreshLocal: () => Promise<HubAuthIpcResult<HubAccessGrant>>;
+  switchStaffLocal: (input: {
+    targetUserId: string;
+    pin: string;
+  }) => Promise<HubAuthIpcResult<HubAccessGrant>>;
+  logoutLocal: () => Promise<HubAuthIpcResult<{ ok: true }>>;
+  clearLocal: () => Promise<{ ok: true }>;
   loginHub: (input: {
     email: string;
     password: string;

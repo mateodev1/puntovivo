@@ -9,6 +9,7 @@ import { BrandMark } from '@/components/brand/BrandMark';
 import { translateServerError } from '@/lib/translateServerError';
 import type { LoginCredentials } from '@/types';
 import { isDeviceIdentityChanged } from './authBootstrapFailure';
+import { getLastDesktopLoginEmail } from './authStorage';
 
 const InstallationSetupPage = lazy(() =>
   import('./InstallationSetupPage').then(module => ({ default: module.InstallationSetupPage }))
@@ -36,7 +37,9 @@ export function LoginPage() {
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<LoginCredentials>();
+  } = useForm<LoginCredentials>({
+    defaultValues: { email: getLastDesktopLoginEmail(), password: '' },
+  });
 
   const onSubmit = async (data: LoginCredentials) => {
     try {
