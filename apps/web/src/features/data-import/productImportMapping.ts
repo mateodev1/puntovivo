@@ -87,13 +87,12 @@ export function hasRepeatedProductIdentity(
   rows: Array<{ values: Partial<Record<ProductImportField, string>> }>
 ): boolean {
   const ids = new Set<string>();
-  const skus = new Set<string>();
   for (const row of rows) {
     const id = row.values.productId?.trim();
-    const sku = row.values.sku?.trim().toLowerCase();
-    if ((id && ids.has(id)) || (sku && skus.has(sku))) return true;
+    // SKU-only imports report duplicate rows in the normal preview. Do not
+    // disable their preview (or change existing supplier-list behavior).
+    if (id && ids.has(id)) return true;
     if (id) ids.add(id);
-    if (sku) skus.add(sku);
   }
   return false;
 }

@@ -9,7 +9,7 @@ import {
 import { productExportColumns } from '@/features/products/productExport';
 
 describe(' product import mapping', () => {
-  it('rejects repeated IDs or SKUs across 500-row batch boundaries', () => {
+  it('rejects repeated IDs across 500-row batch boundaries without blocking SKU-only previews', () => {
     const rows = Array.from({ length: 501 }, (_, index) => ({
       values: {
         productId: `p-${index}`,
@@ -21,7 +21,7 @@ describe(' product import mapping', () => {
     expect(hasRepeatedProductIdentity(rows)).toBe(true);
     rows[500]!.values.productId = 'p-500';
     rows[500]!.values.sku = 'sku-0';
-    expect(hasRepeatedProductIdentity(rows)).toBe(true);
+    expect(hasRepeatedProductIdentity(rows)).toBe(false);
   });
   it('preserves catalog ID and version when mapping editable exports', () => {
     const mapping = autoMapProductHeaders(['Product ID', 'Product Version', 'Product', 'SKU']);
