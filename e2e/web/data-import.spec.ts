@@ -189,7 +189,9 @@ test.describe('launch data import', () => {
     ]);
     const id = String(sheet.getRow(2).getCell(column('Product ID')).value);
     expect(id.length).toBeGreaterThan(0);
-    expect(Number.isSafeInteger(Number(sheet.getRow(2).getCell(column('Product Version')).value))).toBe(true);
+    expect(
+      Number.isSafeInteger(Number(sheet.getRow(2).getCell(column('Product Version')).value))
+    ).toBe(true);
     sheet.getRow(2).getCell(column('Product')).value = newName;
     sheet.getRow(2).getCell(column('SKU')).value = newSku;
     sheet.getRow(2).getCell(column('Description')).value = '';
@@ -215,9 +217,22 @@ test.describe('launch data import', () => {
     await page.getByRole('button', { name: 'Apply 1 row' }).click();
     await expect(page.getByTestId('data-import-report')).toContainText('Products updated: 1');
     await page.goto('/products');
-    await page.getByPlaceholder('Search products...').fill(newSku);
+    await page.getByPlaceholder('Search by name, description or SKU...').fill(newSku);
     await expect(page.locator('tbody tr').filter({ hasText: newName })).toBeVisible();
     await expect(page.locator('tbody tr').filter({ hasText: oldSku })).toHaveCount(0);
+    const updatedDownloadPromise = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Export all 1 results to Excel' }).click();
+    const updatedDownload = await updatedDownloadPromise;
+    const updatedWorkbook = new ExcelJS.Workbook();
+    await updatedWorkbook.xlsx.readFile(await updatedDownload.path());
+    const saved = updatedWorkbook.worksheets[0]!.getRow(2);
+    expect(saved.getCell(column('Product ID')).value).toBe(id);
+    expect(saved.getCell(column('Product')).value).toBe(newName);
+    expect(saved.getCell(column('SKU')).value).toBe(newSku);
+    expect(saved.getCell(column('Description')).value).toBeNull();
+    expect(saved.getCell(column('Cost')).value).toBe(70);
+    expect(saved.getCell(column('Price')).value).toBe(130);
+    expect(saved.getCell(column('Tax rate')).value).toBe(21);
     await expectNoClientIssues(tracker);
   });
 
