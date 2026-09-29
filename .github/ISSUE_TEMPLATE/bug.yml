@@ -1,0 +1,38 @@
+name: Bug report
+description: Report a reproducible product defect without credentials or customer data.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: input
+    id: affected-version-platform
+    attributes:
+      label: Affected version and platform
+      placeholder: "e.g. v1.15.0, Windows 11 desktop"
+    validations:
+      required: true
+  - type: textarea
+    id: observed-behavior
+    attributes:
+      label: Observed behavior
+      description: Describe the user-visible failure without secrets.
+    validations:
+      required: true
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: steps-to-reproduce
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Non-sensitive evidence
+      description: Logs or test results without credentials, tokens or customer data.
+    validations:
+      required: false
