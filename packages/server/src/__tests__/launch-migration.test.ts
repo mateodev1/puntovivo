@@ -52,6 +52,8 @@ function createTestContext(
 function row(
   rowNumber: number,
   values: Partial<{
+    productId: string;
+    productVersion: string;
     name: string;
     sku: string;
     description: string;
@@ -973,6 +975,197 @@ describe(' launch migration', () => {
       .where(and(eq(products.tenantId, tenantId), eq(products.id, existing.id)))
       .get();
     expect(reapplied?.cost).toBe(3500.46);
+  });
+
+  it('updates catalog identity and pricing by tenant-owned ID without falling back to SKU', async () => {
+    const caller = appRouter.createCaller(createTestContext());
+    const original = await caller.products.create({
+      name: 'Original item',
+      sku: 'ID-ORIGINAL-1',
+      description: 'Old description',
+      price: 100,
+      cost: 60,
+      taxRate: 19,
+      stock: 0,
+    });
+    const other = await caller.products.create({
+      name: 'Other item',
+      sku: 'ID-OTHER-1',
+      price: 20,
+      stock: 0,
+    });
+    const input = {
+      dataMode: 'real' as const,
+      sourceName: 'products-editable.xlsx',
+      importMode: 'upsert' as const,
+      decimalFormat: 'auto' as const,
+      rows: [
+        row(2, {
+          productId: original.id,
+          productVersion: String(original.version),
+          name: 'Renamed item',
+          sku: 'ID-RENAMED-1',
+          description: '',
+          cost: '70',
+          price: '130',
+          taxRate: '21',
+        }),
+        row(3, { productId: 'missing-id', name: 'No fallback', sku: other.sku, cost: '88' }),
+        row(4, { productId: original.id, name: 'Repeated ID', sku: 'ID-NEW-4', cost: '80' }),
+        row(5, { productId: other.id, name: 'Collision', sku: original.sku, cost: '30' }),
+      ],
+    };
+    const preview = await caller.launchMigration.previewProducts(input);
+    expect(preview.rows[0]).toMatchObject({
+      status: 'update',
+      existing: {
+        productId: original.id,
+        name: 'Original item',
+        sku: original.sku,
+        description: 'Old description',
+      },
+      changes: {
+        name: 'Renamed item',
+        sku: 'ID-RENAMED-1',
+        description: null,
+        cost: 70,
+        price: 130,
+        taxRate: 21,
+      },
+    });
+    expect(preview.rows[1]).toMatchObject({
+      status: 'invalid',
+      issues: expect.arrayContaining([{ code: 'product_id_not_found', field: 'productId' }]),
+    });
+    expect(preview.rows[2]).toMatchObject({
+      status: 'invalid',
+      issues: expect.arrayContaining([{ code: 'duplicate_file_product_id', field: 'productId' }]),
+    });
+    expect(preview.rows[3]).toMatchObject({
+      status: 'duplicate',
+      issues: expect.arrayContaining([{ code: 'duplicate_existing_sku', field: 'sku' }]),
+    });
+    const otherContext = createTestContext();
+    otherContext.tenantId = 'another-tenant';
+    otherContext.user!.tenantId = 'another-tenant';
+    const foreign = await appRouter.createCaller(otherContext).launchMigration.previewProducts({
+      ...input,
+      rows: [input.rows[0]!],
+    });
+    expect(foreign.rows[0]).toMatchObject({
+      status: 'invalid',
+      issues: expect.arrayContaining([{ code: 'product_id_not_found', field: 'productId' }]),
+    });
+    const createOnly = await caller.launchMigration.previewProducts({
+      ...input,
+      importMode: 'create',
+      rows: [input.rows[0]!],
+    });
+    expect(createOnly.rows[0]).toMatchObject({
+      status: 'invalid',
+      issues: expect.arrayContaining([{ code: 'product_id_requires_update', field: 'productId' }]),
+    });
+    const result = await caller.launchMigration.importProducts({
+      ...input,
+      confirmedRealData: true,
+      previewHash: preview.previewHash,
+    });
+    expect(result.summary).toMatchObject({ updated: 1, imported: 0 });
+    expect(await caller.products.getById({ id: original.id })).toMatchObject({
+      name: 'Renamed item',
+      sku: 'ID-RENAMED-1',
+      description: null,
+      cost: 70,
+      price: 130,
+      taxRate: 21,
+    });
+    expect(await caller.products.getById({ id: other.id })).toMatchObject({
+      name: 'Other item',
+      sku: 'ID-OTHER-1',
+    });
+    const partial = await caller.launchMigration.previewProducts({
+      ...input,
+      rows: [row(2, { productId: other.id, description: 'Only description changes' })],
+    });
+    expect(partial.rows[0]).toMatchObject({
+      status: 'update',
+      normalized: {
+        name: 'Other item',
+        sku: 'ID-OTHER-1',
+        cost: other.cost,
+        price: other.price,
+        taxRate: other.taxRate,
+      },
+      changes: { description: 'Only description changes' },
+    });
+    expect(partial.rows[0]?.changes).not.toHaveProperty('cost');
+    const invalidVersion = await caller.launchMigration.previewProducts({
+      ...input,
+      rows: [
+        row(2, { productId: other.id, productVersion: 'not-a-version', name: 'Do not update' }),
+      ],
+    });
+    expect(invalidVersion.rows[0]).toMatchObject({
+      status: 'invalid',
+      issues: expect.arrayContaining([
+        { code: 'invalid_product_version', field: 'productVersion' },
+      ]),
+    });
+    const emptyName = await caller.launchMigration.previewProducts({
+      ...input,
+      rows: [row(2, { productId: other.id, name: '', sku: other.sku })],
+    });
+    expect(emptyName.rows[0]).toMatchObject({
+      status: 'invalid',
+      issues: expect.arrayContaining([{ code: 'required', field: 'name' }]),
+    });
+    const stale = await caller.launchMigration.previewProducts({
+      ...input,
+      rows: [input.rows[0]!],
+    });
+    expect(stale.rows[0]).toMatchObject({
+      status: 'invalid',
+      issues: expect.arrayContaining([{ code: 'concurrent_update', field: 'productVersion' }]),
+    });
+  });
+
+  it('rejects a catalog edit when the product changes after preview', async () => {
+    const caller = appRouter.createCaller(createTestContext());
+    const product = await caller.products.create({
+      name: 'Concurrent item',
+      sku: 'ID-CONCURRENT-1',
+      price: 10,
+      stock: 0,
+    });
+    const input = {
+      dataMode: 'real' as const,
+      sourceName: 'products-editable.xlsx',
+      importMode: 'upsert' as const,
+      rows: [
+        row(2, {
+          productId: product.id,
+          productVersion: String(product.version),
+          name: 'Updated from file',
+          sku: product.sku,
+        }),
+      ],
+    };
+    const preview = await caller.launchMigration.previewProducts(input);
+    await caller.products.update({
+      id: product.id,
+      version: product.version,
+      name: 'Other operator',
+    });
+    await expect(
+      caller.launchMigration.importProducts({
+        ...input,
+        confirmedRealData: true,
+        previewHash: preview.previewHash,
+      })
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(await caller.products.getById({ id: product.id })).toMatchObject({
+      name: 'Other operator',
+    });
   });
 
   it('rejects stale preview hashes and non-admin callers', async () => {

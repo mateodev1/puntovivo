@@ -12,6 +12,8 @@ export interface LaunchMigrationContext {
 }
 
 export const PRODUCT_IMPORT_FIELDS = [
+  'productId',
+  'productVersion',
   'name',
   'sku',
   'description',
@@ -48,6 +50,10 @@ export type ProductImportIssueCode =
   | 'duplicate_existing_barcode'
   | 'concurrent_duplicate'
   | 'concurrent_update'
+  | 'product_id_not_found'
+  | 'product_id_requires_update'
+  | 'duplicate_file_product_id'
+  | 'invalid_product_version'
   | 'import_failed'
   | 'stock_failed';
 
@@ -75,8 +81,8 @@ export interface NormalizedLaunchProduct {
 }
 
 /**
- * `update` and `unchanged` only appear in `upsert` mode: the SKU matches an
- * existing product whose cost, price, or tax the file changes (or not).
+ * `update` and `unchanged` only appear in `upsert` mode: a SKU or explicit ID
+ * matches an existing product whose mapped fields change (or not).
  */
 export type ProductImportPreviewStatus = 'ready' | 'invalid' | 'duplicate' | 'update' | 'unchanged';
 
@@ -85,6 +91,8 @@ export interface ProductImportExistingProduct {
   productId: string;
   version: number;
   name: string;
+  sku: string;
+  description: string | null;
   cost: number;
   price: number;
   taxRate: number;
@@ -92,6 +100,9 @@ export interface ProductImportExistingProduct {
 
 /** Fields an `update` row will write; absent keys keep the stored value. */
 export interface ProductImportChanges {
+  name?: string;
+  sku?: string;
+  description?: string | null;
   cost?: number;
   price?: number;
   taxRate?: number;

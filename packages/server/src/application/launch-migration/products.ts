@@ -225,8 +225,12 @@ function normalizeRow(
   const tracksLots = parseImportBoolean(row.values.tracksLots);
   const resolvedUnit = resolveImportUnit(row.values.unit, catalogs);
 
-  if (!name) issues.push({ code: 'required', field: 'name' });
-  if (!sku) issues.push({ code: 'required', field: 'sku' });
+  if (!name && (row.values.productId === undefined || row.values.name !== undefined)) {
+    issues.push({ code: 'required', field: 'name' });
+  }
+  if (!sku && (row.values.productId === undefined || row.values.sku !== undefined)) {
+    issues.push({ code: 'required', field: 'sku' });
+  }
   if (name.length > 255) issues.push({ code: 'too_long', field: 'name' });
   if (sku.length > 100) issues.push({ code: 'too_long', field: 'sku' });
   if (description && description.length > 2_000) {
@@ -326,13 +330,24 @@ interface ExistingCatalogProduct extends ProductImportExistingProduct {
 
 async function loadExistingProducts(
   ctx: LaunchMigrationContext,
-  normalizedRows: NormalizedLaunchProduct[]
+  normalizedRows: Array<{ row: LaunchProductImportRow; normalized: NormalizedLaunchProduct }>
 ) {
-  const skuKeys = [...new Set(normalizedRows.map(row => normalizeKey(row.sku)).filter(Boolean))];
+  const skuKeys = [
+    ...new Set(
+      normalizedRows.map(({ normalized }) => normalizeKey(normalized.sku)).filter(Boolean)
+    ),
+  ];
+  const ids = [
+    ...new Set(
+      normalizedRows
+        .map(({ row }) => row.values.productId?.trim())
+        .filter((id): id is string => Boolean(id))
+    ),
+  ];
   const barcodeKeys = [
     ...new Set(
       normalizedRows
-        .map(row => (row.barcode ? normalizeBarcode(row.barcode) : null))
+        .map(({ normalized }) => (normalized.barcode ? normalizeBarcode(normalized.barcode) : null))
         .filter((value): value is string => Boolean(value))
     ),
   ];
@@ -345,6 +360,7 @@ async function loadExistingProducts(
             version: products.version,
             sku: products.sku,
             name: products.name,
+            description: products.description,
             cost: products.cost,
             price: products.price,
             taxRate: products.taxRate,
@@ -359,6 +375,23 @@ async function loadExistingProducts(
           )
           .all()
       : [];
+  const existingIdRows = ids.length
+    ? await ctx.db
+        .select({
+          productId: products.id,
+          version: products.version,
+          sku: products.sku,
+          name: products.name,
+          description: products.description,
+          cost: products.cost,
+          price: products.price,
+          taxRate: products.taxRate,
+          vatRateId: products.vatRateId,
+        })
+        .from(products)
+        .where(and(eq(products.tenantId, ctx.tenantId), inArray(products.id, ids)))
+        .all()
+    : [];
   const existingBarcodeRows =
     barcodeKeys.length > 0
       ? await ctx.db
@@ -378,15 +411,16 @@ async function loadExistingProducts(
   const skus = new Map<string, ExistingCatalogProduct[]>();
   for (const { sku, ...product } of existingSkuRows) {
     const key = normalizeKey(sku);
-    skus.set(key, [...(skus.get(key) ?? []), product]);
+    skus.set(key, [...(skus.get(key) ?? []), { ...product, sku }]);
   }
+  const byId = new Map(existingIdRows.map(product => [product.productId, product]));
   const barcodes = new Map<string, Set<string>>();
   for (const row of existingBarcodeRows) {
     if (!row.barcode) continue;
     const key = normalizeBarcode(row.barcode);
     barcodes.set(key, (barcodes.get(key) ?? new Set()).add(row.id));
   }
-  return { skus, barcodes };
+  return { skus, byId, barcodes };
 }
 
 function hasRawValue(row: LaunchProductImportRow, field: keyof LaunchProductImportRow['values']) {
@@ -404,6 +438,17 @@ function diffExistingProduct(
   existing: ExistingCatalogProduct
 ): ProductImportChanges {
   const changes: ProductImportChanges = {};
+  // Supplier lists do not own catalog identity. Only an explicit ID row may
+  // change name, description or SKU (including clearing description).
+  if (row.values.productId !== undefined) {
+    if (row.values.name !== undefined && normalized.name !== existing.name)
+      changes.name = normalized.name;
+    if (row.values.sku !== undefined && normalized.sku !== existing.sku)
+      changes.sku = normalized.sku;
+    if (row.values.description !== undefined && normalized.description !== existing.description) {
+      changes.description = normalized.description;
+    }
+  }
   if (hasRawValue(row, 'cost') && normalized.cost !== existing.cost) {
     changes.cost = normalized.cost;
   }
@@ -429,26 +474,52 @@ export async function previewLaunchProductImport(
     row,
     ...normalizeRow(row, input.decimalFormat, catalogs),
   }));
-  const existing = await loadExistingProducts(
-    ctx,
-    normalizedRows.map(row => row.normalized)
-  );
+  const existing = await loadExistingProducts(ctx, normalizedRows);
   const upsert = input.importMode === 'upsert';
   const seenSkus = new Set<string>();
+  const seenIds = new Set<string>();
   const seenBarcodes = new Set<string>();
 
   const rows: ProductImportPreviewRow[] = normalizedRows.map(({ row, normalized, ...rest }) => {
     const issues = [...rest.issues];
     const skuKey = normalizeKey(normalized.sku);
+    const hasId = row.values.productId !== undefined;
+    const productId = row.values.productId?.trim() ?? '';
     const barcodeKey = normalized.barcode ? normalizeBarcode(normalized.barcode) : null;
     let target: ExistingCatalogProduct | undefined;
+
+    if (hasId) {
+      if (!upsert) {
+        issues.push({ code: 'product_id_requires_update', field: 'productId' });
+      } else if (!productId || !existing.byId.has(productId)) {
+        issues.push({ code: 'product_id_not_found', field: 'productId' });
+      } else if (seenIds.has(productId)) {
+        issues.push({ code: 'duplicate_file_product_id', field: 'productId' });
+      } else {
+        target = existing.byId.get(productId);
+      }
+      if (productId) seenIds.add(productId);
+      if (row.values.productVersion !== undefined) {
+        const rawVersion = row.values.productVersion.trim();
+        const expectedVersion = Number(rawVersion);
+        if (!/^\d+$/.test(rawVersion) || !Number.isSafeInteger(expectedVersion)) {
+          issues.push({ code: 'invalid_product_version', field: 'productVersion' });
+        } else if (target && target.version !== expectedVersion) {
+          issues.push({ code: 'concurrent_update', field: 'productVersion' });
+        }
+      }
+    }
 
     if (skuKey) {
       const matches = existing.skus.get(skuKey) ?? [];
       if (seenSkus.has(skuKey)) {
         issues.push({ code: 'duplicate_file_sku', field: 'sku' });
       } else if (matches.length > 0) {
-        if (upsert && matches.length === 1) target = matches[0];
+        if (hasId) {
+          if (matches.some(match => match.productId !== productId)) {
+            issues.push({ code: 'duplicate_existing_sku', field: 'sku' });
+          }
+        } else if (upsert && matches.length === 1) target = matches[0];
         else issues.push({ code: 'duplicate_existing_sku', field: 'sku' });
       }
       seenSkus.add(skuKey);
@@ -468,16 +539,33 @@ export async function previewLaunchProductImport(
       const status = hasValidationIssue ? 'invalid' : issues.length > 0 ? 'duplicate' : 'ready';
       return { rowNumber: row.rowNumber, status, normalized, issues };
     }
-    const changes = diffExistingProduct(row, normalized, target);
+    const effective = hasId
+      ? {
+          ...normalized,
+          name: row.values.name === undefined ? target.name : normalized.name,
+          sku: row.values.sku === undefined ? target.sku : normalized.sku,
+          description:
+            row.values.description === undefined ? target.description : normalized.description,
+          cost: hasRawValue(row, 'cost') ? normalized.cost : target.cost,
+          price: hasRawValue(row, 'price') ? normalized.price : target.price,
+          taxRate:
+            hasRawValue(row, 'taxRate') || hasRawValue(row, 'taxName')
+              ? normalized.taxRate
+              : target.taxRate,
+        }
+      : normalized;
+    const changes = diffExistingProduct(row, effective, target);
     return {
       rowNumber: row.rowNumber,
       status: Object.keys(changes).length > 0 ? 'update' : 'unchanged',
-      normalized,
+      normalized: effective,
       issues,
       existing: {
         productId: target.productId,
         version: target.version,
         name: target.name,
+        sku: target.sku,
+        description: target.description,
         cost: target.cost,
         price: target.price,
         taxRate: target.taxRate,
@@ -489,7 +577,14 @@ export async function previewLaunchProductImport(
   return {
     dataMode: input.dataMode,
     importMode: input.importMode,
-    previewHash: hashLaunchProductImport(input),
+    // ID-based edits must be reviewed against the exact catalog revisions seen
+    // in preview. Supplier-list imports retain their historical rebase behavior.
+    previewHash: input.rows.some(row => row.values.productId !== undefined)
+      ? createHash('sha256')
+          .update(hashLaunchProductImport(input))
+          .update(JSON.stringify(rows.map(row => row.existing?.version ?? null)))
+          .digest('hex')
+      : hashLaunchProductImport(input),
     summary: {
       total: rows.length,
       ready: rows.filter(row => row.status === 'ready').length,

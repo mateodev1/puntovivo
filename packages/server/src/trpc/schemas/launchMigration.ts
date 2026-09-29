@@ -6,6 +6,7 @@ export const launchImportDataModeSchema = z.enum(['demo', 'real']);
 /**
  * `create` skips SKUs that already exist; `upsert` (supplier price lists)
  * creates new SKUs and updates cost, sale price, and tax of existing ones.
+ * ID-anchored catalog exports can also update name, description, and SKU.
  */
 export const productImportModeSchema = z.enum(['create', 'upsert']);
 
@@ -35,6 +36,8 @@ export const launchProductImportRowSchema = z
     rowNumber: z.number().int().min(2).max(1_000_000),
     values: z
       .object({
+        productId: importCell,
+        productVersion: importCell,
         name: importCell,
         sku: importCell,
         description: importCell,
