@@ -3,6 +3,8 @@ import type { ParsedImportFile } from './fileParser';
 import { normalizeImportHeader } from './mappingUtils';
 
 export const PRODUCT_IMPORT_FIELDS = [
+  'productId',
+  'productVersion',
   'name',
   'sku',
   'description',
@@ -22,6 +24,8 @@ export type ProductImportField = (typeof PRODUCT_IMPORT_FIELDS)[number];
 export type ProductImportMapping = Record<ProductImportField, string>;
 
 const HEADER_ALIASES: Record<ProductImportField, readonly string[]> = {
+  productId: ['product id'],
+  productVersion: ['product version'],
   name: ['name', 'product name', 'nombre', 'nombre del producto', 'product', 'producto'],
   sku: ['sku', 'codigo', 'codigo interno', 'referencia', 'reference'],
   description: ['description', 'descripcion', 'detalle'],
@@ -78,10 +82,28 @@ export function mapProductImportRows(file: ParsedImportFile, mapping: ProductImp
   }));
 }
 
-/** Supplier-list updates (`requireCost`) are pointless without a cost column. */
+/** Validate the whole workbook before splitting it into 500-row requests. */
+export function hasRepeatedProductIdentity(
+  rows: Array<{ values: Partial<Record<ProductImportField, string>> }>
+): boolean {
+  const ids = new Set<string>();
+  const skus = new Set<string>();
+  for (const row of rows) {
+    const id = row.values.productId?.trim();
+    const sku = row.values.sku?.trim().toLowerCase();
+    if ((id && ids.has(id)) || (sku && skus.has(sku))) return true;
+    if (id) ids.add(id);
+    if (sku) skus.add(sku);
+  }
+  return false;
+}
+
+/** Supplier lists require name, SKU and cost; ID-anchored edits may be partial. */
 export function hasRequiredProductMapping(
   mapping: ProductImportMapping,
   requireCost = false
 ): boolean {
-  return Boolean(mapping.name && mapping.sku && (!requireCost || mapping.cost));
+  return Boolean(
+    mapping.productId || (mapping.name && mapping.sku && (!requireCost || mapping.cost))
+  );
 }

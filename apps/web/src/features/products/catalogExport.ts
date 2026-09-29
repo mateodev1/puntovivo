@@ -1,8 +1,10 @@
 import type { Product } from '@/types';
 import type { ExportColumn } from '@/services/export/exportService';
 
-/** Columns understood by Import data's product upsert. SKU identifies existing rows. */
+/** ID anchors updates even when the operator edits the SKU. */
 export const editableProductColumns: ExportColumn<Product>[] = [
+  { key: 'id', header: 'Product ID' },
+  { key: 'version', header: 'Product Version' },
   { key: 'name', header: 'Product' },
   { key: 'sku', header: 'SKU' },
   { key: 'description', header: 'Description' },

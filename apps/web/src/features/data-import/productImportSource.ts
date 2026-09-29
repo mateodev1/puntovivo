@@ -208,6 +208,8 @@ export function autoMapSupplierHeaders(headers: string[]): SupplierMappingResult
     ) ?? '';
   mapping.taxRate = find(TAX_HEADERS);
   const generic = autoMapProductHeaders(headers);
+  mapping.productId = generic.productId;
+  mapping.productVersion = generic.productVersion;
   mapping.barcode = generic.barcode;
   mapping.unit = generic.unit;
   const costCandidates = headers.filter(isPriceLikeHeader);

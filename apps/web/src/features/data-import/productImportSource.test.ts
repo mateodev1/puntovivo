@@ -26,9 +26,20 @@ async function xlsxFile(
 
 describe('supplier price-list sources', () => {
   it('recognizes editable catalog exports without treating supplier prices as sale prices', () => {
-    const headers = ['Product', 'SKU', 'Description', 'Cost', 'Price', 'Tax rate'];
+    const headers = [
+      'Product ID',
+      'Product Version',
+      'Product',
+      'SKU',
+      'Description',
+      'Cost',
+      'Price',
+      'Tax rate',
+    ];
     expect(isEditableProductExport(headers)).toBe(true);
     expect(autoMapProductHeaders(headers)).toMatchObject({
+      productId: 'Product ID',
+      productVersion: 'Product Version',
       name: 'Product',
       sku: 'SKU',
       cost: 'Cost',
@@ -36,6 +47,11 @@ describe('supplier price-list sources', () => {
       taxRate: 'Tax rate',
     });
     expect(isEditableProductExport(['Código', 'Descripción', 'Precio'])).toBe(false);
+    expect(autoMapProductHeaders(['Product ID', 'Description'])).toMatchObject({
+      productId: 'Product ID',
+      name: '',
+      description: 'Description',
+    });
     expect(autoMapSupplierHeaders(['Código', 'Descripción', 'Precio']).mapping.price).toBe('');
   });
   it('skips a merged title and notes to find a header below row 1 (LEKONS shape)', async () => {

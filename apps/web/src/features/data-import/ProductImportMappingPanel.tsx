@@ -61,16 +61,16 @@ export function ProductImportMappingPanel({
       {importMode === 'upsert' ? (
         <div className="space-y-2 rounded-xl border border-primary-100 bg-primary-50/60 p-4">
           <p className="text-xs font-medium leading-5 text-secondary-800">
-            {t('steps.map.upsertNote')}
+            {t(mapping.productId ? 'steps.map.catalogNote' : 'steps.map.upsertNote')}
           </p>
-          {!mapping.cost && costCandidates.length > 1 ? (
+          {!mapping.productId && !mapping.cost && costCandidates.length > 1 ? (
             <p
               className="rounded-lg border border-warning-200 bg-warning-50 px-3 py-2 text-xs font-semibold text-warning-900"
               data-testid="data-import-cost-candidates"
             >
               {t('steps.map.costCandidates', { columns: costCandidates.join(', ') })}
             </p>
-          ) : !mapping.cost ? (
+          ) : !mapping.productId && !mapping.cost ? (
             <p className="text-xs font-semibold text-warning-900">{t('steps.map.costRequired')}</p>
           ) : null}
         </div>
@@ -114,7 +114,8 @@ export function ProductImportMappingPanel({
         {PRODUCT_IMPORT_FIELDS.map(field => {
           const id = `data-import-map-${field}`;
           const required =
-            field === 'name' || field === 'sku' || (importMode === 'upsert' && field === 'cost');
+            !mapping.productId &&
+            (field === 'name' || field === 'sku' || (importMode === 'upsert' && field === 'cost'));
           return (
             <div key={field}>
               <label htmlFor={id} className="label mb-2 block">

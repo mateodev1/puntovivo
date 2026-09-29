@@ -16,6 +16,7 @@ import { ImportSourcePanel } from './ImportSourcePanel';
 import {
   autoMapProductHeaders,
   hasRequiredProductMapping,
+  hasRepeatedProductIdentity,
   mapProductImportRows,
   type ProductImportField,
   type ProductImportMapping,
@@ -129,6 +130,7 @@ export function ProductImportWorkflow({ dataMode, onBusyChange }: ProductImportW
         : [],
     [file, mapping, skuPrefix, defaultTaxRate]
   );
+  const repeatedIdentity = useMemo(() => hasRepeatedProductIdentity(mappedRows), [mappedRows]);
   const previewMutation = trpc.launchMigration.previewProducts.useMutation({
     onError: onErrorToast(toast, t, {
       titleKey: 'dataImport:toast.previewError',
@@ -163,7 +165,7 @@ export function ProductImportWorkflow({ dataMode, onBusyChange }: ProductImportW
   };
   const remap = (headers: string[], mode: ProductImportMode) => {
     if (mode === 'upsert') {
-      if (isEditableProductExport(headers)) {
+      if (isEditableProductExport(headers) || autoMapProductHeaders(headers).productId) {
         setProfileId('generic');
         setDetectedProfileId('generic');
         setMapping(autoMapProductHeaders(headers));
@@ -219,6 +221,7 @@ export function ProductImportWorkflow({ dataMode, onBusyChange }: ProductImportW
       // Titles or notes above the header row are typical of supplier price
       // lists rather than POS exports, so suggest the supplier-list mode.
       const suggestedMode: ProductImportMode =
+        Boolean(autoMapProductHeaders(parsed.headers).productId) ||
         isEditableProductExport(parsed.headers) ||
         (candidate.headerIndex > 0 && detectProductImportProfile(parsed.headers) === 'generic')
           ? 'upsert'
@@ -236,7 +239,8 @@ export function ProductImportWorkflow({ dataMode, onBusyChange }: ProductImportW
   };
   const requireCost = importMode === 'upsert';
   const handlePreview = async () => {
-    if (!file || !mapping || !hasRequiredProductMapping(mapping, requireCost)) return;
+    if (!file || !mapping || repeatedIdentity || !hasRequiredProductMapping(mapping, requireCost))
+      return;
     const chunks = chunkRows(mappedRows);
     const results: ProductImportPreview[] = [];
     setProgress({ phase: 'preview', done: 0, total: chunks.length });
@@ -452,7 +456,9 @@ export function ProductImportWorkflow({ dataMode, onBusyChange }: ProductImportW
     invalidatePreview();
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
-  const canPreview = Boolean(file && mapping && hasRequiredProductMapping(mapping, requireCost));
+  const canPreview = Boolean(
+    file && mapping && !repeatedIdentity && hasRequiredProductMapping(mapping, requireCost)
+  );
   const batchLabel = (phase: BatchProgress['phase']) =>
     progress?.phase === phase && progress.total > 1
       ? t(
@@ -549,6 +555,11 @@ export function ProductImportWorkflow({ dataMode, onBusyChange }: ProductImportW
               invalidatePreview();
             }}
           />
+          {repeatedIdentity && (
+            <p role="alert" className="text-sm text-danger-700">
+              {t('dataImport:steps.map.repeatedIdentity')}
+            </p>
+          )}
           <div className="flex justify-end">
             <Button
               type="button"

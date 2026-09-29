@@ -86,6 +86,17 @@ export function ProductImportPreviewPanel({
       return t('table.noChanges');
     }
     const parts: string[] = [];
+    if (row.changes.name !== undefined)
+      parts.push(t('table.nameChange', { from: row.existing.name, to: row.changes.name }));
+    if (row.changes.sku !== undefined)
+      parts.push(t('table.skuChange', { from: row.existing.sku, to: row.changes.sku }));
+    if (row.changes.description !== undefined)
+      parts.push(
+        t('table.descriptionChange', {
+          from: row.existing.description || t('table.emptyValue'),
+          to: row.changes.description || t('table.emptyValue'),
+        })
+      );
     if (row.changes.cost !== undefined) {
       const from = row.existing.cost;
       parts.push(

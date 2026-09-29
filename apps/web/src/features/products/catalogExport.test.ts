@@ -41,6 +41,8 @@ describe('catalog export', () => {
     expect(
       autoMapProductHeaders(editableProductColumns.map(column => column.header))
     ).toMatchObject({
+      productId: 'Product ID',
+      productVersion: 'Product Version',
       name: 'Product',
       sku: 'SKU',
       cost: 'Cost',

@@ -78,7 +78,7 @@
     "exportSelected": "Exportar seleccionados a Excel",
     "exportAll": "Exportar los {{count}} resultados a Excel",
     "exporting": "Preparando exportación: {{done}} de {{total}} productos",
-    "importHint": "Para actualizar productos existentes, usa Importar datos en modo actualizar. Actualmente solo se actualizan costo, precio e impuesto; SKU identifica el producto.",
+    "importHint": "Para actualizar nombre, descripción, SKU, costo, precio e impuesto, usa Importar datos en modo actualizar. Conserva el ID y la versión del producto en este archivo.",
     "pageReports": "Otros formatos e impresión (solo esta página)",
     "pages": "Páginas de productos",
     "page": "Página {{page}} de {{total}}",

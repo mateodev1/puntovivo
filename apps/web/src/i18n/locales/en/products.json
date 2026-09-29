@@ -44,7 +44,7 @@
     "exportSelected": "Export selected to Excel",
     "exportAll": "Export all {{count}} results to Excel",
     "exporting": "Preparing export: {{done}} of {{total}} products",
-    "importHint": "To update existing products, use Import data in update mode. Only cost, price and tax are currently updated; SKU identifies the product.",
+    "importHint": "To update name, description, SKU, cost, price and tax, use Import data in update mode. Keep Product ID and Product Version in this file.",
     "pageReports": "Other formats and print (this page only)",
     "pages": "Product pages",
     "page": "Page {{page}} of {{total}}",
