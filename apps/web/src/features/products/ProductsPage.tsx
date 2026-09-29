@@ -21,7 +21,9 @@ import {
 import { ProductDetailsDrawer } from '@/features/products/ProductDetailsDrawer';
 import { EmbeddingDriftBanner } from '@/features/products/EmbeddingDriftBanner';
 import { EmptyStateReadinessNudge } from '@/components/feedback/EmptyStateReadinessNudge';
+import { editableProductColumns, fetchCatalogForExport } from '@/features/products/catalogExport';
 import { productExportColumns } from '@/features/products/productExport';
+import { exportToExcel } from '@/services/export/exportService';
 import { productsColumns, type DisplayProduct } from '@/features/products/productsColumns';
 import { useProductsSemanticSearch } from '@/features/products/useProductsSemanticSearch';
 import { buildProductPayload } from '@/features/products/productPayload';
@@ -91,11 +93,36 @@ export function ProductsPage() {
   // hook's debounced `literalFallbackSearch`) and the trivial displayProducts merge.
   const semantic = useProductsSemanticSearch({ canManage, canRegenerate });
 
-  const productsQuery = trpc.products.list.useQuery({
-    page: 1,
-    perPage: 50,
+  const [page, setPage] = useState(1);
+  const [categoryId, setCategoryId] = useState('');
+  const [activeFilter, setActiveFilter] = useState('all');
+  const [skuPrefix, setSkuPrefix] = useState('');
+  const [debouncedSkuPrefix, setDebouncedSkuPrefix] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [exportProgress, setExportProgress] = useState<{ done: number; total: number } | null>(
+    null
+  );
+  const [exportError, setExportError] = useState('');
+  useEffect(() => {
+    const handle = window.setTimeout(() => setDebouncedSkuPrefix(skuPrefix.trim()), 300);
+    return () => window.clearTimeout(handle);
+  }, [skuPrefix]);
+  const filters = {
     search: semantic.literalFallbackSearch,
+    skuPrefix: debouncedSkuPrefix || undefined,
+    categoryId: categoryId || undefined,
+    isActive: activeFilter === 'all' ? undefined : activeFilter === 'active',
     includeVariantParents: true,
+  };
+  const resetCatalogPosition = () => {
+    setPage(1);
+    setSelectedIds(new Set());
+  };
+
+  const productsQuery = trpc.products.list.useQuery({
+    ...filters,
+    page,
+    perPage: 20,
   });
 
   const categoriesQuery = trpc.categories.tree.useQuery();
@@ -162,6 +189,7 @@ export function ProductsPage() {
   const deleteMutation = trpc.products.delete.useMutation({
     onSuccess: async () => {
       await utils.products.list.invalidate();
+      setPage(1);
       setProductToDelete(null);
       toast.success({ title: t('toast.deactivated') });
     },
@@ -188,6 +216,38 @@ export function ProductsPage() {
     syncStatus: product.syncStatus ?? undefined,
     syncVersion: product.syncVersion ?? undefined,
   }));
+  const totalItems = productsQuery.data?.totalItems ?? 0;
+  const totalPages = productsQuery.data?.totalPages ?? 0;
+  const filterPending =
+    skuPrefix.trim() !== debouncedSkuPrefix ||
+    (!semantic.semanticModeEnabled &&
+      semantic.literalQuery.trim() !== (semantic.literalFallbackSearch ?? ''));
+  const exportProducts = async (all: boolean) => {
+    if (exportProgress || filterPending || (all ? totalItems === 0 : selectedIds.size === 0))
+      return;
+    setExportError('');
+    setExportProgress({ done: 0, total: totalItems });
+    try {
+      const rows = await fetchCatalogForExport(
+        nextPage => utils.products.list.fetch({ ...filters, page: nextPage, perPage: 200 }),
+        (done, total) => setExportProgress({ done, total }),
+        all ? undefined : selectedIds
+      );
+      const normalizedRows: Product[] = rows.map(row => ({
+        ...row,
+        isActive: row.isActive ?? false,
+        syncStatus: row.syncStatus ?? undefined,
+        syncVersion: row.syncVersion ?? undefined,
+      }));
+      await exportToExcel(normalizedRows, editableProductColumns, 'products-editable', {
+        includeTimestamp: true,
+      });
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setExportProgress(null);
+    }
+  };
 
   // when semantic mode is active and the server returned results, the
   // hook hands back the ranked + normalized rows; otherwise render the literal list.
@@ -374,6 +434,9 @@ export function ProductsPage() {
       {!productsQuery.isLoading &&
         !productsQuery.error &&
         !semantic.hasActiveSearch &&
+        !skuPrefix &&
+        !categoryId &&
+        activeFilter === 'all' &&
         products.length === 0 && <EmptyStateReadinessNudge scope="products" />}
 
       <div className="card p-6">
@@ -389,12 +452,128 @@ export function ProductsPage() {
         )}
         {!productsQuery.isLoading && !productsQuery.error && (
           <div className="space-y-4">
-            <TableExportActions
-              data={products}
-              columns={productExportColumns}
-              filename="products"
-              title={t('page.title')}
-            />
+            {!semantic.semanticModeEnabled && (
+              <div className="space-y-3">
+                <div className="flex flex-wrap gap-3">
+                  <input
+                    className="input max-w-xs"
+                    aria-label={t('catalog.skuPrefix')}
+                    placeholder={t('catalog.skuPrefix')}
+                    value={skuPrefix}
+                    maxLength={100}
+                    disabled={!!exportProgress}
+                    onChange={event => {
+                      setSkuPrefix(event.target.value);
+                      resetCatalogPosition();
+                    }}
+                  />
+                  <select
+                    className="input max-w-xs"
+                    aria-label={t('catalog.category')}
+                    value={categoryId}
+                    disabled={!!exportProgress}
+                    onChange={event => {
+                      setCategoryId(event.target.value);
+                      resetCatalogPosition();
+                    }}
+                  >
+                    <option value="">{t('catalog.allCategories')}</option>
+                    {categoriesQuery.data?.items.map(category => (
+                      <option key={category.id} value={category.id}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    className="input max-w-xs"
+                    aria-label={t('catalog.status')}
+                    value={activeFilter}
+                    disabled={!!exportProgress}
+                    onChange={event => {
+                      setActiveFilter(event.target.value);
+                      resetCatalogPosition();
+                    }}
+                  >
+                    <option value="all">{t('catalog.allStatuses')}</option>
+                    <option value="active">{t('table.active')}</option>
+                    <option value="inactive">{t('table.inactive')}</option>
+                  </select>
+                  <button
+                    className="btn-outline"
+                    type="button"
+                    disabled={!!exportProgress}
+                    onClick={() => {
+                      semantic.setLiteralQuery('');
+                      setSkuPrefix('');
+                      setCategoryId('');
+                      setActiveFilter('all');
+                      resetCatalogPosition();
+                    }}
+                  >
+                    {t('catalog.clear')}
+                  </button>
+                </div>
+                <p className="text-sm text-secondary-600">
+                  {t('catalog.results', { count: totalItems })}
+                </p>
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    className="btn-outline"
+                    disabled={!products.length || !!exportProgress}
+                    onClick={() => {
+                      setSelectedIds(current => {
+                        const next = new Set(current);
+                        const allOnPage = products.every(product => next.has(product.id));
+                        products.forEach(product =>
+                          allOnPage ? next.delete(product.id) : next.add(product.id)
+                        );
+                        return next;
+                      });
+                    }}
+                  >
+                    {t('catalog.selectPage')}
+                  </button>
+                  <span className="text-sm text-secondary-600">
+                    {t('catalog.selected', { count: selectedIds.size })}
+                  </span>
+                  <button
+                    type="button"
+                    className="btn-outline"
+                    disabled={!selectedIds.size || !!exportProgress || filterPending}
+                    onClick={() => void exportProducts(false)}
+                  >
+                    {t('catalog.exportSelected')}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-outline"
+                    disabled={!totalItems || !!exportProgress || filterPending}
+                    onClick={() => void exportProducts(true)}
+                  >
+                    {t('catalog.exportAll', { count: totalItems })}
+                  </button>
+                </div>
+                {exportProgress && <p role="status">{t('catalog.exporting', exportProgress)}</p>}
+                {exportError && (
+                  <p role="alert" className="text-sm text-danger-600">
+                    {exportError}
+                  </p>
+                )}
+                <p className="text-xs text-secondary-500">{t('catalog.importHint')}</p>
+                <details>
+                  <summary className="cursor-pointer text-sm text-secondary-600">
+                    {t('catalog.pageReports')}
+                  </summary>
+                  <TableExportActions
+                    data={products}
+                    columns={productExportColumns}
+                    filename="products-current-page"
+                    title={t('page.title')}
+                  />
+                </details>
+              </div>
+            )}
 
             {isAdmin && marginQuery.error && (
               <StatusStrip
@@ -415,7 +594,10 @@ export function ProductsPage() {
                     aria-checked={semantic.semanticEnabled}
                     aria-label={t('semantic.toggleLabel')}
                     title={t('semantic.toggleHint')}
-                    onClick={() => semantic.setSemanticEnabled(current => !current)}
+                    onClick={() => {
+                      semantic.setSemanticEnabled(current => !current);
+                      resetCatalogPosition();
+                    }}
                     className={cn(
                       'flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors',
                       semantic.semanticEnabled
@@ -476,20 +658,53 @@ export function ProductsPage() {
 
             <DataTable
               variant="dense"
-              columns={productsColumns(
-                handleOpenDetails,
-                handleOpenEdit,
-                product => setProductToDelete(product),
-                canManage,
-                canDelete,
-                semantic.semanticIsActive,
-                marginByProduct
-              )}
+              columns={[
+                ...(!semantic.semanticModeEnabled
+                  ? [
+                      {
+                        id: 'selectForExport',
+                        header: () => t('catalog.select'),
+                        cell: ({ row }: { row: { original: DisplayProduct } }) => (
+                          <input
+                            type="checkbox"
+                            aria-label={t('catalog.selectProduct', { name: row.original.name })}
+                            checked={selectedIds.has(row.original.id)}
+                            disabled={!!exportProgress}
+                            onChange={event =>
+                              setSelectedIds(current => {
+                                const next = new Set(current);
+                                if (event.target.checked) next.add(row.original.id);
+                                else next.delete(row.original.id);
+                                return next;
+                              })
+                            }
+                          />
+                        ),
+                      },
+                    ]
+                  : []),
+                ...productsColumns(
+                  handleOpenDetails,
+                  handleOpenEdit,
+                  product => setProductToDelete(product),
+                  canManage,
+                  canDelete,
+                  semantic.semanticIsActive,
+                  marginByProduct
+                ),
+              ]}
               data={displayProducts}
               searchValue={semantic.semanticModeEnabled ? undefined : semantic.literalQuery}
-              onSearchChange={semantic.semanticModeEnabled ? undefined : semantic.setLiteralQuery}
+              onSearchChange={
+                semantic.semanticModeEnabled
+                  ? undefined
+                  : value => {
+                      semantic.setLiteralQuery(value);
+                      resetCatalogPosition();
+                    }
+              }
               searchPlaceholder={t('table.search')}
-              pageSize={10}
+              pageSize={20}
               // keyboard row-activate mirrors the Pencil (edit)
               // action for manager / admin; viewer / cashier have no
               // editable row so it stays a no-op.  added a separate
@@ -504,6 +719,28 @@ export function ProductsPage() {
                   : undefined
               }
             />
+
+            {!semantic.semanticModeEnabled && totalPages > 1 && (
+              <nav className="flex items-center gap-3" aria-label={t('catalog.pages')}>
+                <button
+                  type="button"
+                  className="btn-outline"
+                  disabled={page <= 1 || !!exportProgress}
+                  onClick={() => setPage(value => value - 1)}
+                >
+                  {t('catalog.previous')}
+                </button>
+                <span>{t('catalog.page', { page, total: totalPages })}</span>
+                <button
+                  type="button"
+                  className="btn-outline"
+                  disabled={page >= totalPages || !!exportProgress}
+                  onClick={() => setPage(value => value + 1)}
+                >
+                  {t('catalog.next')}
+                </button>
+              </nav>
+            )}
 
             {semantic.semanticIsActive && displayProducts.length === 0 && !semantic.isSearching && (
               <p className="text-sm text-secondary-500">{t('semantic.noResults')}</p>

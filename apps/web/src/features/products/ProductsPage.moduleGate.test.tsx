@@ -21,6 +21,8 @@ const {
   regenerateResultMock,
   marginUseQueryMock,
   productsListUseQueryMock,
+  productsListFetchMock,
+  exportToExcelMock,
   toastWarningMock,
 } = vi.hoisted(() => ({
   useAuthMock: vi.fn(),
@@ -34,8 +36,12 @@ const {
   regenerateResultMock: vi.fn(),
   marginUseQueryMock: vi.fn(),
   productsListUseQueryMock: vi.fn(),
+  productsListFetchMock: vi.fn(),
+  exportToExcelMock: vi.fn(),
   toastWarningMock: vi.fn(),
 }));
+
+vi.mock('@/services/export/exportService', () => ({ exportToExcel: exportToExcelMock }));
 
 vi.mock('@/features/auth/AuthProvider', () => ({
   useAuth: useAuthMock,
@@ -93,7 +99,7 @@ vi.mock('@/lib/trpc', async () => ({
   trpc: {
     useUtils: () => ({
       products: {
-        list: { invalidate: vi.fn() },
+        list: { invalidate: vi.fn(), fetch: productsListFetchMock },
         semanticSearch: { invalidate: semanticSearchInvalidateMock },
         embeddingHealth: { invalidate: embeddingHealthInvalidateMock },
         getById: { invalidate: vi.fn() },
@@ -188,6 +194,8 @@ describe('ProductsPage semantic-search module gate', () => {
     regenerateResultMock.mockReset();
     marginUseQueryMock.mockReset();
     productsListUseQueryMock.mockReset();
+    productsListFetchMock.mockReset();
+    exportToExcelMock.mockReset();
     toastWarningMock.mockReset();
     useAuthMock.mockReturnValue({
       user: { id: 'u-1', role: 'manager' },
@@ -257,6 +265,87 @@ describe('ProductsPage semantic-search module gate', () => {
         expect.objectContaining({ search: 'product beyond first page' })
       );
     });
+  });
+
+  it('combines SKU prefix and status filters and paginates server results', async () => {
+    useIsModuleActiveMock.mockReturnValue(false);
+    productsListUseQueryMock.mockReturnValue({
+      data: { items: [{ id: 'p1', name: 'Fox', sku: 'fox-1' }], totalItems: 21, totalPages: 2 },
+      isLoading: false,
+      error: null,
+    });
+    render(<ProductsPage />);
+    fireEvent.change(screen.getByRole('textbox', { name: 'SKU starts with' }), {
+      target: { value: 'fox-' },
+    });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Filter by status' }), {
+      target: { value: 'active' },
+    });
+    await waitFor(() =>
+      expect(productsListUseQueryMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({ skuPrefix: 'fox-', isActive: true, page: 1 })
+      )
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    expect(productsListUseQueryMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ skuPrefix: 'fox-', isActive: true, page: 2 })
+    );
+  });
+
+  it('exports every filtered page, not just the visible products', async () => {
+    useIsModuleActiveMock.mockReturnValue(false);
+    productsListUseQueryMock.mockReturnValue({
+      data: { items: [{ id: 'p1', name: 'Fox', sku: 'fox-1' }], totalItems: 2, totalPages: 1 },
+      isLoading: false,
+      error: null,
+    });
+    productsListFetchMock.mockImplementation(async ({ page }: { page: number }) => ({
+      items: [{ id: `p${page}`, name: 'Fox', sku: `fox-${page}` }],
+      totalItems: 2,
+      totalPages: 2,
+    }));
+    render(<ProductsPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'Export all 2 results to Excel' }));
+    await waitFor(() =>
+      expect(exportToExcelMock).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({ id: 'p1' }),
+          expect.objectContaining({ id: 'p2' }),
+        ]),
+        expect.any(Array),
+        'products-editable',
+        expect.any(Object)
+      )
+    );
+    expect(productsListFetchMock).toHaveBeenCalledWith(
+      expect.objectContaining({ perPage: 200, page: 2 })
+    );
+  });
+
+  it('exports only selected product IDs after fetching the whole filtered catalog', async () => {
+    useIsModuleActiveMock.mockReturnValue(false);
+    productsListUseQueryMock.mockReturnValue({
+      data: { items: [{ id: 'p1', name: 'Fox', sku: 'fox-1' }], totalItems: 2, totalPages: 2 },
+      isLoading: false,
+      error: null,
+    });
+    productsListFetchMock.mockImplementation(async ({ page }: { page: number }) => ({
+      items: [{ id: `p${page}`, name: 'Fox', sku: `fox-${page}` }],
+      totalItems: 2,
+      totalPages: 2,
+    }));
+    render(<ProductsPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'Select or deselect this page' }));
+    expect(screen.getByText('1 selected')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Export selected to Excel' }));
+    await waitFor(() =>
+      expect(exportToExcelMock).toHaveBeenCalledWith(
+        [expect.objectContaining({ id: 'p1' })],
+        expect.any(Array),
+        'products-editable',
+        expect.any(Object)
+      )
+    );
   });
 
   it('keeps semantic queries disabled while the modules snapshot is still placeholder', () => {
