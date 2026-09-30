@@ -129,7 +129,7 @@ jobs:
       - name: Install Linux system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y dbus-x11 xvfb python3-dbus python3-gi libgtk-3-dev libwebkit2gtk-4.1-dev librsvg2-dev fakeroot rpm
+          sudo apt-get install -y dbus-x11 xvfb gnome-keyring python3-dbus python3-gi libgtk-3-dev libwebkit2gtk-4.1-dev librsvg2-dev fakeroot rpm
           sudo apt-get install -y libasound2t64 || sudo apt-get install -y libasound2
 
       # Electron 42+ no longer downloads its runtime during package installation.

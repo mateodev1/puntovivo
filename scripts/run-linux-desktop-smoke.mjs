@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
 
@@ -111,6 +112,31 @@ async function stopPortal(portal) {
 
 async function main() {
   const packagedPath = parsePackagedPath(process.argv.slice(2));
+  // Run under dbus-run-session. The renderer signs in and now requires an actual
+  // Secret Service; Chromium's basic_text backend must never seal credentials.
+  const keyring = spawnSync('gnome-keyring-daemon', ['--unlock', '--components=secrets'], {
+    input: randomBytes(32).toString('hex'),
+    encoding: 'utf8',
+    timeout: START_TIMEOUT_MS,
+  });
+  if (keyring.error || keyring.status !== 0) {
+    throw new Error('Could not start the isolated Linux smoke keyring');
+  }
+  const secretService = spawnSync(
+    'gdbus',
+    [
+      'introspect',
+      '--session',
+      '--dest',
+      'org.freedesktop.secrets',
+      '--object-path',
+      '/org/freedesktop/secrets',
+    ],
+    { stdio: 'ignore', timeout: START_TIMEOUT_MS }
+  );
+  if (secretService.error || secretService.status !== 0) {
+    throw new Error('The isolated Linux smoke keyring is not available on D-Bus');
+  }
   let portalStderr = '';
   const portal = spawn('python3', [portalScript], {
     stdio: ['ignore', 'pipe', 'pipe'],

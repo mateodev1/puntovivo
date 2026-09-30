@@ -43,7 +43,10 @@ test('packaged renderer smoke proves the preload bridge and a data-backed login'
   assert.match(smoke, /PUNTOVIVO_DB_KEY: randomBytes\(32\)\.toString\('hex'\)/);
   assert.match(smoke, /AUTO_UPDATE: 'false'/);
   assert.match(smoke, /--use-mock-keychain/);
-  assert.match(smoke, /--password-store=basic/);
+  assert.match(
+    smoke,
+    /VERIFY_RENDERER \? '--password-store=gnome-libsecret' : '--password-store=basic'/
+  );
   assert.match(smoke, /--disable-gpu/);
   assert.doesNotMatch(smoke, /KEY_STORE_GATED|keyGated/);
   assert.match(smoke, /Boolean\(window\.electron\)/);
@@ -102,6 +105,9 @@ test('packaged renderer smoke proves the preload bridge and a data-backed login'
 });
 
 test('Linux smoke supplies a deterministic portal instead of filtering its diagnostics', () => {
+  assert.match(linuxSmoke, /gnome-keyring-daemon/);
+  assert.match(linuxSmoke, /randomBytes\(32\)/);
+  assert.match(linuxSmoke, /org\.freedesktop\.secrets/);
   assert.match(linuxSmoke, /spawn\('python3', \[portalScript\]/);
   assert.match(linuxSmoke, /await verifyPortalContract\(\)/);
   assert.match(linuxSmoke, /--verify-contract/);
