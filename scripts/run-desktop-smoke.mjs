@@ -172,11 +172,16 @@ const userDataDir = mkdtempSync(path.join(os.tmpdir(), 'puntovivo-smoke-'));
 const serverPort = await reserveLoopbackPort();
 const rendererPort = VERIFY_RENDERER ? await reserveLoopbackPort() : null;
 const childArgs = [`--user-data-dir=${userDataDir}`];
-// Chromium can initialize password storage even when the application injects
-// its own temporary DB key. Keep the smoke isolated from host keychain prompts.
+// The macOS smoke isolates itself from host keychain prompts. On Linux the
+// renderer login persists a refresh credential, so it must use the isolated
+// Secret Service started by run-linux-desktop-smoke rather than basic_text.
 if (process.platform === 'darwin') childArgs.push('--use-mock-keychain');
 if (process.platform === 'linux') {
-  childArgs.push('--password-store=basic', '--disable-gpu', '--disable-software-rasterizer');
+  childArgs.push(
+    VERIFY_RENDERER ? '--password-store=gnome-libsecret' : '--password-store=basic',
+    '--disable-gpu',
+    '--disable-software-rasterizer'
+  );
 }
 if (rendererPort !== null) {
   childArgs.push(`--remote-debugging-port=${rendererPort}`, '--remote-debugging-address=127.0.0.1');

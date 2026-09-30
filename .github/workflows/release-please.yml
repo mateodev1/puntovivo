@@ -6,12 +6,12 @@ name: release-please
 # accumulates the commits since the last release, bumps the version (lock-step
 # across the 4 package.json files via release-please-config.json extra-files),
 # and prepends the generated notes to CHANGELOG.md. Merging the Release PR
-# creates the vX.Y.Z tag + a GitHub Release; the curate-release-notes job then
+# creates the vX.Y.Z tag + a DRAFT GitHub Release; the curate-release-notes job
 # replaces that technical body with docs/releases/vX.Y.Z.md from the exact tag.
 #
-# When that release is created, the build-artifacts job invokes the reusable
-# release.yml (workflow_call) with the new tag to build and upload the web +
-# desktop installers onto the release. Running release.yml as a reusable
+# When that draft is created, the build-artifacts job waits for the curated
+# notes, then invokes release.yml (workflow_call) with the new tag to build and
+# upload installers, deploy the feed, and publish the completed release. Running it as a reusable
 # workflow in the same run means no PAT is needed — a bot-created release event
 # would not, by itself, trigger a separate workflow.
 #
@@ -47,7 +47,7 @@ jobs:
 
   build-artifacts:
     name: Build & upload release artifacts
-    needs: release-please
+    needs: [release-please, curate-release-notes]
     if: ${{ needs.release-please.outputs.release_created == 'true' }}
     # The called release.yml uploads the installers (contents) AND publishes the
     # auto-update feed to GitHub Pages; a reusable workflow's jobs cannot exceed
