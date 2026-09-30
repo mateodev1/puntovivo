@@ -52,6 +52,14 @@ is usable from source, but it is not a new packaged release yet.
   a real alert receiver with ownership, and an observed retail pilot remain
   open gates.
 
+## [1.16.2](https://github.com/mateodev1/puntovivo/compare/v1.16.1...v1.16.2) (2026-09-30)
+
+
+### Bug Fixes
+
+* **release:** give checkout-less release jobs the repository context ([5fc2b9b](https://github.com/mateodev1/puntovivo/commit/5fc2b9bfb2faaea966426f3101b20f7efd0cc663))
+* **release:** give checkout-less release jobs the repository context ([1379b2d](https://github.com/mateodev1/puntovivo/commit/1379b2d429a0e56a1915d119d59bd9c45ce3b027))
+
 ## [1.14.4](https://github.com/johnny4young/puntovivo/compare/v1.14.3...v1.14.4) (2026-09-16)
 
 
