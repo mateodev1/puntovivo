@@ -47,7 +47,12 @@ the PR. Because the note lives on `main`, the PR diff never shows it; the status
 is where to confirm it. `main` requires no status checks, so neither the status
 nor the CI run stops the PR from merging on its own.
 
-After Release Please creates the tag, `.github/workflows/release-please.yml`
-checks out that exact tag and replaces the generated GitHub release body with
-the curated file. The generated `CHANGELOG.md` remains available for readers
-who want commit-level detail.
+After Release Please creates the tag and a **draft** release,
+`.github/workflows/release-please.yml` checks out that exact tag and replaces
+the generated GitHub release body with the curated file. The artifact workflow
+must receive a draft: published releases are immutable and cannot accept new
+installers. It validates the tagged web flows, builds and uploads every
+distributable artifact, deploys the update feed, then publishes the draft. For
+manual recovery, create the draft at the versioned `main` tag and dispatch
+`release.yml`; never publish an empty release before that workflow succeeds.
+The generated `CHANGELOG.md` remains available for commit-level detail.

@@ -1,6 +1,6 @@
 name: Release Artifacts
 
-# Builds and uploads the web + desktop artifacts for an EXISTING GitHub Release.
+# Builds and uploads the web + desktop artifacts for an EXISTING DRAFT GitHub Release.
 #
 # The release itself (tag + GitHub Release + changelog notes) is created by
 # release-please (.github/workflows/release-please.yml) when its Release PR is
@@ -56,6 +56,19 @@ permissions:
   id-token: write
 
 jobs:
+  verify-draft:
+    name: Require mutable draft release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Refuse published or mismatched release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq .object.sha)" = "$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)"
+
   # ============================================================================
   # Prerelease money-path gate
   # ============================================================================
@@ -64,6 +77,7 @@ jobs:
   # operator to exercise a branch/SHA without spending push/PR CI minutes.
   e2e-web:
     name: Prerelease Web Money Flows
+    needs: verify-draft
     uses: ./.github/workflows/prerelease-e2e.yml
     with:
       ref: refs/tags/${{ inputs.tag }}
@@ -306,7 +320,7 @@ jobs:
   # the Release downloads (the installers are too large for Pages).
   publish-feed:
     name: Publish update feed to Pages
-    needs: release-desktop
+    needs: [release-web, release-desktop]
     runs-on: ubuntu-latest
     env:
       ROLLOUT_PERCENTAGE: ${{ inputs.rollout_percentage }}
@@ -375,3 +389,15 @@ jobs:
       - name: Deploy to Pages
         id: deployment
         uses: actions/deploy-pages@v5
+
+  publish-release:
+    name: Publish complete release
+    needs: publish-feed
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Publish the draft after all downloads and the update feed succeed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "$RELEASE_TAG" --draft=false

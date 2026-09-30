@@ -54,14 +54,23 @@ test('prerelease workflow is reusable, manually dispatchable, and retains eviden
 test('release artifacts wait for the exact-tag prerelease gate without enabling push CI', () => {
   const releaseWorkflow = readRepoFile('.github/workflows/release.yml');
   const ciWorkflow = readRepoFile('.github/workflows/ci.yml');
+  const draftGate = extractJob(releaseWorkflow, 'verify-draft');
   const gate = extractJob(releaseWorkflow, 'e2e-web');
   const releaseWeb = extractJob(releaseWorkflow, 'release-web');
   const releaseDesktop = extractJob(releaseWorkflow, 'release-desktop');
+  const feed = extractJob(releaseWorkflow, 'publish-feed');
+  const publish = extractJob(releaseWorkflow, 'publish-release');
 
+  assert.match(draftGate, /gh release view "\$RELEASE_TAG" --json isDraft/);
+  assert.match(gate, /^    needs: verify-draft$/m);
   assert.match(gate, /uses: \.\/\.github\/workflows\/prerelease-e2e\.yml/);
   assert.ok(gate.includes('ref: refs/tags/${{ inputs.tag }}'));
   assert.match(releaseWeb, /^    needs: e2e-web$/m);
   assert.match(releaseDesktop, /^    needs: e2e-web$/m);
+  assert.match(feed, /^    needs: \[release-web, release-desktop\]$/m);
+  assert.match(publish, /^    needs: publish-feed$/m);
+  assert.match(publish, /gh release edit "\$RELEASE_TAG" --draft=false/);
+  assert.equal(JSON.parse(readRepoFile('release-please-config.json')).packages['.'].draft, true);
   assert.match(ciWorkflow, /^              - 'e2e\/web\/business\.spec\.ts'$/m);
   assert.match(ciWorkflow, /^              - '\.github\/workflows\/prerelease-e2e\.yml'$/m);
   assert.doesNotMatch(ciWorkflow, /run: pnpm run test:e2e:web:prerelease/);
