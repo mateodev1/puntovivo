@@ -61,6 +61,7 @@ test('release artifacts wait for the exact-tag prerelease gate without enabling 
   const feed = extractJob(releaseWorkflow, 'publish-feed');
   const publish = extractJob(releaseWorkflow, 'publish-release');
 
+  assert.ok(releaseWorkflow.includes('\n  GH_REPO: ${{ github.repository }}\n'));
   assert.match(draftGate, /gh release view "\$RELEASE_TAG" --json isDraft/);
   assert.match(gate, /^    needs: verify-draft$/m);
   assert.match(gate, /uses: \.\/\.github\/workflows\/prerelease-e2e\.yml/);
