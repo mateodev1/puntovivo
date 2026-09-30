@@ -10,7 +10,7 @@
  *
  * @module features/products/ProductsPage.details.test
  */
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
@@ -265,7 +265,9 @@ describe('ProductsPage default column set', () => {
   it('invalidates the saved product detail before a later edit can reuse it', async () => {
     render(<ProductsPage />);
 
-    await updateMutationOptionsRef.current?.onSuccess?.(undefined, { id: product.id });
+    await act(async () => {
+      await updateMutationOptionsRef.current?.onSuccess?.(undefined, { id: product.id });
+    });
 
     expect(productsListInvalidateMock).toHaveBeenCalledTimes(1);
     expect(productDetailInvalidateMock).toHaveBeenCalledWith({ id: product.id });

@@ -106,6 +106,7 @@ export const listProductsInput = paginationInput.extend({
   // catalog page is not on the dedicated FTS endpoint. Keep untrusted search
   // text within the same operator-input ceiling as products.search.
   search: z.string().trim().max(120).optional(),
+  skuPrefix: z.string().trim().max(100).optional(),
   categoryId: z.string().optional(),
   isActive: z.boolean().optional(),
   pharmacyOnly: z.boolean().optional(),

@@ -3,11 +3,51 @@ import { describe, expect, it } from 'vitest';
 import {
   autoMapProductHeaders,
   hasRequiredProductMapping,
+  hasRepeatedProductIdentity,
   mapProductImportRows,
 } from './productImportMapping';
 import { productExportColumns } from '@/features/products/productExport';
 
 describe(' product import mapping', () => {
+  it('rejects repeated IDs across 500-row batch boundaries without blocking SKU-only previews', () => {
+    const rows = Array.from({ length: 501 }, (_, index) => ({
+      values: {
+        productId: `p-${index}`,
+        sku: `SKU-${index}`,
+      },
+    }));
+    expect(hasRepeatedProductIdentity(rows)).toBe(false);
+    rows[500]!.values.productId = 'p-0';
+    expect(hasRepeatedProductIdentity(rows)).toBe(true);
+    rows[500]!.values.productId = 'p-500';
+    rows[500]!.values.sku = 'sku-0';
+    expect(hasRepeatedProductIdentity(rows)).toBe(false);
+  });
+  it('preserves catalog ID and version when mapping editable exports', () => {
+    const mapping = autoMapProductHeaders(['Product ID', 'Product Version', 'Product', 'SKU']);
+    expect(hasRequiredProductMapping(mapping, true)).toBe(true);
+    const file = {
+      sourceName: 'products.xlsx',
+      headers: ['Product ID', 'Product Version', 'Product', 'SKU'],
+      rows: [
+        {
+          rowNumber: 2,
+          values: {
+            'Product ID': 'p-1',
+            'Product Version': '3',
+            Product: 'New name',
+            SKU: 'NEW-SKU',
+          },
+        },
+      ],
+    };
+    expect(mapProductImportRows(file, mapping)[0]?.values).toMatchObject({
+      productId: 'p-1',
+      productVersion: '3',
+      name: 'New name',
+      sku: 'NEW-SKU',
+    });
+  });
   it('auto-maps neutral English and accented Spanish aliases', () => {
     const mapping = autoMapProductHeaders([
       'Nombre',

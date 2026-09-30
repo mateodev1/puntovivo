@@ -184,6 +184,14 @@ export interface SupplierMappingResult {
   costCandidates: string[];
 }
 
+/** The catalog's editable workbook is not a supplier price list. */
+export function isEditableProductExport(headers: string[]): boolean {
+  const normalized = new Set(headers.map(normalizeImportHeader));
+  return ['product', 'sku', 'description', 'cost', 'price', 'tax rate'].every(header =>
+    normalized.has(header)
+  );
+}
+
 /**
  * Supplier price lists carry the supplier's prices, which are the store's
  * cost. Never auto-map a sale price here, and only auto-map the cost when
@@ -200,6 +208,8 @@ export function autoMapSupplierHeaders(headers: string[]): SupplierMappingResult
     ) ?? '';
   mapping.taxRate = find(TAX_HEADERS);
   const generic = autoMapProductHeaders(headers);
+  mapping.productId = generic.productId;
+  mapping.productVersion = generic.productVersion;
   mapping.barcode = generic.barcode;
   mapping.unit = generic.unit;
   const costCandidates = headers.filter(isPriceLikeHeader);

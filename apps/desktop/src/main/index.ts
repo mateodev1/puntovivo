@@ -47,6 +47,7 @@ import { registerSessionIpc } from './ipc/session-ipc.js';
 import { createInstallationClaimHandler } from './session/installation-claim.js';
 import { registerWindowIpc } from './ipc/window.js';
 import { createHubAuthSession, HUB_AUTH_STATE_FILE } from './session/hub-auth-session.js';
+import { createLocalAuthFetch } from './session/local-auth-fetch.js';
 import {
   registerSettingsIpc,
   applyThemePreference,
@@ -138,6 +139,20 @@ const hubAuthSession = (() => {
     allowInsecureLoopback: isDev,
   });
 })();
+// The packaged renderer is cross-site to loopback, so Chromium will not keep
+// the server's Strict refresh cookie. Custody stays in Electron main instead.
+const localAuthOrigin = `http://127.0.0.1:${authorityRuntime.bindPort}`;
+const localAuthSession =
+  !isDev && authorityRuntime.authorityMode !== 'hub_client'
+    ? createHubAuthSession({
+        hubUrl: localAuthOrigin,
+        getStatePath: () => join(app.getPath('userData'), 'local-auth-session.v1.enc'),
+        getDeviceId: () => readDeviceIdFromDir(app.getPath('userData')),
+        safeStorage,
+        allowInsecureLoopback: true,
+        fetchImpl: createLocalAuthFetch(getServer, localAuthOrigin),
+      })
+    : undefined;
 
 let isQuitting = false;
 let serverShutdownComplete = false;
@@ -323,7 +338,10 @@ registerSettingsIpc({
   refreshTray: trayController.refresh,
 });
 registerDeviceIpc({ log: mainLog });
-registerSessionIpc({ ...(hubAuthSession ? { hubAuthSession } : {}) });
+registerSessionIpc({
+  ...(hubAuthSession ? { hubAuthSession } : {}),
+  ...(localAuthSession ? { localAuthSession } : {}),
+});
 ipcMain.handle(
   'session:complete-setup',
   createInstallationClaimHandler({

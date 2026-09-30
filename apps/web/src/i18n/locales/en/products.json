@@ -7,7 +7,7 @@
   "table": {
     "loading": "Loading products...",
     "error": "Unable to load products",
-    "search": "Search products...",
+    "search": "Search by name, description or SKU...",
     "searchSemantic": "Combine text and meaning (e.g. coffee for brewing)",
     "product": "Product",
     "category": "Category",
@@ -28,6 +28,28 @@
     "marginUnavailable": "Margin data could not be loaded. Product management remains available.",
     "matrixParent": "Variant matrix",
     "service": "Service"
+  },
+  "catalog": {
+    "skuPrefix": "SKU starts with",
+    "category": "Filter by category",
+    "allCategories": "All categories",
+    "status": "Filter by status",
+    "allStatuses": "All statuses",
+    "clear": "Clear filters",
+    "results": "{{count}} matching products",
+    "select": "Select",
+    "selectProduct": "Select {{name}}",
+    "selectPage": "Select or deselect this page",
+    "selected": "{{count}} selected",
+    "exportSelected": "Export selected to Excel",
+    "exportAll": "Export all {{count}} results to Excel",
+    "exporting": "Preparing export: {{done}} of {{total}} products",
+    "importHint": "To update name, description, SKU, cost, price and tax, use Import data in update mode. Keep Product ID and Product Version in this file.",
+    "pageReports": "Other formats and print (this page only)",
+    "pages": "Product pages",
+    "page": "Page {{page}} of {{total}}",
+    "previous": "Previous",
+    "next": "Next"
   },
   "details": {
     "title": "Product details",

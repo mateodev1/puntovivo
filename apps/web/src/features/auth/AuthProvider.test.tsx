@@ -26,6 +26,12 @@ const {
   hubModeMock,
   clearHubMock,
   refreshHubMock,
+  localModeMock,
+  refreshLocalMock,
+  loginLocalMock,
+  logoutLocalMock,
+  clearLocalMock,
+  rememberEmailMock,
 } = vi.hoisted(() => ({
   navigateMock: vi.fn(),
   setAccessTokenMock: vi.fn(),
@@ -48,6 +54,12 @@ const {
   hubModeMock: vi.fn(),
   clearHubMock: vi.fn(),
   refreshHubMock: vi.fn(),
+  localModeMock: vi.fn(),
+  refreshLocalMock: vi.fn(),
+  loginLocalMock: vi.fn(),
+  logoutLocalMock: vi.fn(),
+  clearLocalMock: vi.fn(),
+  rememberEmailMock: vi.fn(),
 }));
 
 const queryClientMock = { clear: queryClientClearMock };
@@ -95,10 +107,20 @@ vi.mock('./hubAuthTransport', async () => ({
   refreshHubSession: refreshHubMock,
 }));
 
+vi.mock('./localDesktopAuthTransport', () => ({
+  isPackagedLocalAuth: localModeMock,
+  refreshLocal: refreshLocalMock,
+  loginLocal: loginLocalMock,
+  logoutLocal: logoutLocalMock,
+  clearLocal: clearLocalMock,
+  switchStaffLocal: vi.fn(),
+}));
+
 vi.mock('./authStorage', async () => ({
   ...(await vi.importActual<typeof import('./authStorage')>('./authStorage')),
   persistAuthSession: persistSessionMock,
   clearAuthSession: clearSessionMock,
+  rememberLastDesktopLoginEmail: rememberEmailMock,
 }));
 
 vi.mock('@/features/sales/useCartWorkspaceStore', () => ({
@@ -174,6 +196,12 @@ beforeEach(() => {
   hubModeMock.mockReset().mockReturnValue(false);
   clearHubMock.mockReset().mockResolvedValue(undefined);
   refreshHubMock.mockReset();
+  localModeMock.mockReset().mockReturnValue(false);
+  refreshLocalMock.mockReset();
+  loginLocalMock.mockReset();
+  logoutLocalMock.mockReset();
+  clearLocalMock.mockReset().mockResolvedValue(undefined);
+  rememberEmailMock.mockReset();
 });
 
 afterEach(() => {
@@ -191,6 +219,50 @@ describe('useAuth — context guard', () => {
 });
 
 describe('AuthProvider — bootstrap', () => {
+  it('restores packaged desktop credentials through main, never the browser cookie', async () => {
+    localModeMock.mockReturnValue(true);
+    refreshLocalMock.mockResolvedValue({ token: 'local-main-token' });
+    meQueryMock.mockResolvedValue(sessionPayload);
+    const register = vi.fn().mockResolvedValue({ ok: true });
+    Object.defineProperty(window, 'api', { configurable: true, value: { session: { register } } });
+
+    function Probe() {
+      return <span>{useAuth().isAuthenticated ? 'authenticated' : 'signed-out'}</span>;
+    }
+    render(wrap({ children: <Probe /> }));
+    await waitFor(() => expect(screen.getByText('authenticated')).toBeInTheDocument());
+    expect(refreshLocalMock).toHaveBeenCalledOnce();
+    expect(refreshMutateMock).not.toHaveBeenCalled();
+    expect(register).toHaveBeenCalledWith('local-main-token');
+  });
+
+  it('logs into packaged desktop through main so it retains the renewable credential', async () => {
+    localModeMock.mockReturnValue(true);
+    refreshLocalMock.mockRejectedValue(
+      Object.assign(new Error('No local session'), {
+        data: { httpStatus: 401 },
+      })
+    );
+    loginLocalMock.mockResolvedValue({ token: 'local-login-token' });
+    meQueryMock.mockResolvedValue(sessionPayload);
+    const register = vi.fn().mockResolvedValue({ ok: true });
+    Object.defineProperty(window, 'api', { configurable: true, value: { session: { register } } });
+
+    const { result } = renderHook(() => useAuth(), { wrapper: wrap });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await act(async () => {
+      await result.current.login({ email: 'admin@localhost', password: 'Admin123!Dev' });
+    });
+
+    expect(loginLocalMock).toHaveBeenCalledWith({
+      email: 'admin@localhost',
+      password: 'Admin123!Dev',
+    });
+    expect(loginMutateMock).not.toHaveBeenCalled();
+    expect(register).toHaveBeenCalledWith('local-login-token');
+    expect(result.current.isAuthenticated).toBe(true);
+    expect(rememberEmailMock).toHaveBeenCalledWith('admin@localhost');
+  });
   it('issues one refresh when StrictMode mounts the boot effect twice', async () => {
     __resetBootSessionRefreshForTests();
     // Hold the refresh open so both mount invocations are genuinely in
@@ -723,6 +795,7 @@ describe('AuthProvider — login flow', () => {
     expect(navigateMock).toHaveBeenCalledWith('/sales');
     expect(auth.current.isAuthenticated).toBe(true);
     expect(auth.current.user?.role).toBe('cashier');
+    expect(rememberEmailMock).toHaveBeenCalledWith('admin@localhost');
   });
 
   it('on failure stores the error and rethrows so the caller can render translated copy', async () => {
@@ -746,6 +819,7 @@ describe('AuthProvider — login flow', () => {
     expect(captured).toBe(failure);
     await waitFor(() => expect(auth.current.error).toBe(failure));
     expect(navigateMock).not.toHaveBeenCalled();
+    expect(rememberEmailMock).not.toHaveBeenCalled();
   });
 
   it('purges the resumed identity caches before a different login becomes visible', async () => {

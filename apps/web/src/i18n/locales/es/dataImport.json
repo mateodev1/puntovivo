@@ -42,12 +42,14 @@
     "map": {
       "kicker": "Paso 2",
       "title": "Asigna tus columnas",
-      "description": "Confirma las columnas detectadas. El nombre y el SKU son obligatorios; puedes dejar los demás campos sin asignar.",
+      "description": "Confirma las columnas detectadas. Para crear productos se requieren nombre y SKU; para actualizar por ID, asigna el ID y solo los campos que quieras cambiar.",
       "notMapped": "No importar",
       "decimalFormat": "Formato numérico",
       "costCandidates": "Este archivo tiene varias columnas de precio ({{columns}}). Elige cuál es tu costo.",
       "upsertNote": "En una lista de proveedor, los precios del archivo son tu costo. El precio de venta no se modifica en los productos existentes y queda en 0 en los nuevos, salvo que asignes una columna.",
-      "costRequired": "Asigna la columna de costo para continuar."
+      "catalogNote": "Con ID del producto, esta fila solo actualiza ese producto. Puedes cambiar nombre, descripción, SKU, costo, precio e impuesto; no borres el ID ni alteres la versión exportada.",
+      "costRequired": "Asigna la columna de costo para continuar.",
+      "repeatedIdentity": "El archivo repite un ID o SKU en distintas filas. Corrígelo antes de validar, incluso si las filas están en lotes distintos."
     },
     "preview": {
       "kicker": "Paso 3",
@@ -56,6 +58,8 @@
     }
   },
   "fields": {
+    "productId": "ID del producto",
+    "productVersion": "Versión del producto",
     "name": "Nombre del producto",
     "sku": "SKU",
     "description": "Descripción",
@@ -108,6 +112,10 @@
     "unchanged": "Sin cambios"
   },
   "issues": {
+    "product_id_not_found": "El ID no identifica un producto de esta empresa; la fila no se creará ni se buscará por SKU",
+    "product_id_requires_update": "Selecciona el modo actualizar para importar filas con ID de producto",
+    "duplicate_file_product_id": "El ID del producto está repetido en este archivo",
+    "invalid_product_version": "La versión del producto no es válida",
     "required": "Falta un valor obligatorio",
     "too_long": "El valor supera la longitud permitida",
     "invalid_number": "El formato numérico no es válido",
@@ -147,6 +155,9 @@
     "newProduct": "Producto nuevo",
     "noChanges": "Sin cambios",
     "costChange": "Costo {{from}} → {{to}} ({{percent}})",
+    "nameChange": "Nombre {{from}} → {{to}}",
+    "skuChange": "SKU {{from}} → {{to}}",
+    "descriptionChange": "Descripción {{from}} → {{to}}",
     "priceChange": "Precio {{from}} → {{to}}",
     "taxChange": "Impuesto {{from}}% → {{to}}%",
     "filter": "Mostrar",

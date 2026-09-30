@@ -142,6 +142,100 @@ test.describe('launch data import', () => {
     await expectNoClientIssues(tracker);
   });
 
+  test('editable Excel round-trips a product by ID with renamed SKU @prerelease-money', async ({
+    page,
+  }, testInfo) => {
+    const tracker = attachClientIssueTracker(page);
+    const suffix = `${testInfo.parallelIndex}-${Date.now()}`;
+    const oldSku = `E2E-EDIT-${suffix}`;
+    const newSku = `E2E-RENAMED-${suffix}`;
+    const newName = `E2E Edited Product ${suffix}`;
+    await loginAs(page, 'admin');
+    await page.goto('/data-import');
+    await chooseRealData(page);
+    await page.locator('#data-import-file').setInputFiles({
+      name: 'create-editable-product.csv',
+      mimeType: 'text/csv',
+      buffer: Buffer.from(
+        `Name,SKU,Description,Cost,Price,Tax rate\nOriginal ${suffix},${oldSku},Old description,60,100,19`
+      ),
+    });
+    await page.getByRole('button', { name: 'Validate and preview' }).click();
+    await expect(page.getByTestId('data-import-summary-ready')).toContainText('1');
+    await confirmRealData(page);
+    await page.getByRole('button', { name: 'Import 1 ready row' }).click();
+    await expect(page.getByTestId('data-import-report')).toContainText('Products created: 1');
+
+    await page.goto('/products');
+    await page.getByLabel('SKU starts with').fill(oldSku);
+    const downloadPromise = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Export all 1 results to Excel' }).click();
+    const download = await downloadPromise;
+    const { default: ExcelJS } = await import('exceljs');
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.readFile(await download.path());
+    const sheet = workbook.worksheets[0]!;
+    const headers = (sheet.getRow(1).values as string[]).slice(1);
+    const column = (name: string) => headers.indexOf(name) + 1;
+    expect(headers).toEqual([
+      'Product ID',
+      'Product Version',
+      'Product',
+      'SKU',
+      'Description',
+      'Cost',
+      'Price',
+      'Tax rate',
+    ]);
+    const id = String(sheet.getRow(2).getCell(column('Product ID')).value);
+    expect(id.length).toBeGreaterThan(0);
+    expect(
+      Number.isSafeInteger(Number(sheet.getRow(2).getCell(column('Product Version')).value))
+    ).toBe(true);
+    sheet.getRow(2).getCell(column('Product')).value = newName;
+    sheet.getRow(2).getCell(column('SKU')).value = newSku;
+    sheet.getRow(2).getCell(column('Description')).value = '';
+    sheet.getRow(2).getCell(column('Cost')).value = 70;
+    sheet.getRow(2).getCell(column('Price')).value = 130;
+    sheet.getRow(2).getCell(column('Tax rate')).value = 21;
+    const edited = Buffer.from(await workbook.xlsx.writeBuffer());
+
+    await page.goto('/data-import');
+    await chooseRealData(page);
+    await page.locator('#data-import-file').setInputFiles({
+      name: 'products-editable.xlsx',
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      buffer: edited,
+    });
+    await expect(page.getByLabel('Product ID')).toHaveValue('Product ID');
+    await page.getByRole('button', { name: 'Validate and preview' }).click();
+    await expect(page.getByTestId('data-import-summary-updates')).toContainText('1');
+    const previewRow = page.getByTestId('data-import-preview-row-2');
+    await expect(previewRow).toContainText(newSku);
+    await expect(previewRow).toContainText(newName);
+    await confirmRealData(page);
+    await page.getByRole('button', { name: 'Apply 1 row' }).click();
+    await expect(page.getByTestId('data-import-report')).toContainText('Products updated: 1');
+    await page.goto('/products');
+    await page.getByPlaceholder('Search by name, description or SKU...').fill(newSku);
+    await expect(page.locator('tbody tr').filter({ hasText: newName })).toBeVisible();
+    await expect(page.locator('tbody tr').filter({ hasText: oldSku })).toHaveCount(0);
+    const updatedDownloadPromise = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Export all 1 results to Excel' }).click();
+    const updatedDownload = await updatedDownloadPromise;
+    const updatedWorkbook = new ExcelJS.Workbook();
+    await updatedWorkbook.xlsx.readFile(await updatedDownload.path());
+    const saved = updatedWorkbook.worksheets[0]!.getRow(2);
+    expect(saved.getCell(column('Product ID')).value).toBe(id);
+    expect(saved.getCell(column('Product')).value).toBe(newName);
+    expect(saved.getCell(column('SKU')).value).toBe(newSku);
+    expect(saved.getCell(column('Description')).value).toBeNull();
+    expect(saved.getCell(column('Cost')).value).toBe(70);
+    expect(saved.getCell(column('Price')).value).toBe(130);
+    expect(saved.getCell(column('Tax rate')).value).toBe(21);
+    await expectNoClientIssues(tracker);
+  });
+
   test('service imports stay sellable and never enter inventory procurement', async ({
     page,
   }, testInfo) => {
@@ -193,7 +287,9 @@ test.describe('launch data import', () => {
       name: /Select Product for Initial Inventory/i,
     });
     await inventoryDialog.getByPlaceholder('Search by SKU, name, or barcode').fill(serviceSku);
-    await expect(inventoryDialog.getByText('No products matched the current filters.')).toBeVisible();
+    await expect(
+      inventoryDialog.getByText('No products matched the current filters.')
+    ).toBeVisible();
     await inventoryDialog.getByRole('button', { name: 'Cancel' }).click();
 
     // Purchase and order pickers use the same filter, preventing a draft that

@@ -26,6 +26,7 @@ import {
   requireExplicitSignIn,
   isExplicitSignInRequired,
   allowSessionResumeAfterSignIn,
+  rememberLastDesktopLoginEmail,
 } from './authStorage';
 import { clearAllCustomerDisplayProjections } from '@/features/surfaces/customerDisplayStorage';
 import {
@@ -51,6 +52,14 @@ import {
   refreshHubSession,
   switchHubStaff,
 } from './hubAuthTransport';
+import {
+  clearLocal,
+  isPackagedLocalAuth,
+  loginLocal,
+  logoutLocal,
+  refreshLocal,
+  switchStaffLocal,
+} from './localDesktopAuthTransport';
 import { AuthContext, type AuthContextType } from './AuthContext';
 
 /**
@@ -195,7 +204,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
   );
 
   const clearLocalSession = useCallback(
-    (options?: { preserveWorkspaces?: boolean; clearDesktop?: boolean }) => {
+    (options?: {
+      preserveWorkspaces?: boolean;
+      clearDesktop?: boolean;
+      preserveLocalCredential?: boolean;
+    }) => {
       setBootstrapRecovery(null);
       clearAccessToken();
       resetIdentityOwnedState({
@@ -208,7 +221,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // does not block the local cleanup. window.api is undefined in
       // pure-browser mode (no IPC bridge to clear).
       if (options?.clearDesktop !== false) {
-        void clearDesktopSession()?.catch(err => {
+        const cleanup =
+          isPackagedLocalAuth() && !options?.preserveLocalCredential
+            ? clearLocal()
+            : clearDesktopSession();
+        void cleanup?.catch(err => {
           console.warn('Desktop session clear failed during logout:', err);
         });
       }
@@ -235,6 +252,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // Hub's sealed refresh credential is separate from the desktop singleton.
       // Forget it only for an explicit account change, not during an outage.
       if (isHubClientAuth()) await clearHubSession();
+      else if (isPackagedLocalAuth()) await clearLocal();
       else await clearDesktopSession();
       if (generation !== bootGeneration.current) return;
       // The browser's httpOnly cookie cannot be deleted offline by the renderer.
@@ -340,11 +358,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
         let refreshResult: { token: string };
         if (isHubClientAuth()) {
           refreshResult = await refreshHubSession();
+        } else if (isPackagedLocalAuth()) {
+          refreshResult = await refreshLocal();
         } else {
-          // A packaged or development Electron renderer is intentionally not
-          // cookie-same-site with its loopback authority. Resume the already
-          // verified, memory-only desktop token across a renderer reload;
-          // browsers keep using the httpOnly refresh-cookie path.
+          // Dev Electron can resume its verified memory-only token across a
+          // renderer reload; browsers keep using the httpOnly cookie path.
+          // Packaged Electron uses main-process custody above instead.
           const resumed = await resumeDesktopSession();
           refreshResult =
             resumed?.token !== null && resumed?.token !== undefined
@@ -430,10 +449,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
               email: credentials.email,
               password: credentials.password,
             })
-          : await vanillaClient.auth.login.mutate({
-              email: credentials.email,
-              password: credentials.password,
-            });
+          : isPackagedLocalAuth()
+            ? await loginLocal(credentials)
+            : await vanillaClient.auth.login.mutate({
+                email: credentials.email,
+                password: credentials.password,
+              });
         if (!isCurrent()) return;
         setAccessToken(authData.token);
         // bind the access token to the desktop session
@@ -517,6 +538,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         });
         persistAuthSession(session);
         allowSessionResumeAfterSignIn();
+        rememberLastDesktopLoginEmail(session.user.email);
         setUser(session.user);
         setTenant(session.tenant);
         // see init path; same tenant attribution applies on
@@ -589,7 +611,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // A rejected attempt must leave the current operator fully intact.
       const authData = isHubClientAuth()
         ? await switchHubStaff(input)
-        : await vanillaClient.auth.switchStaff.mutate(input);
+        : isPackagedLocalAuth()
+          ? await switchStaffLocal(input)
+          : await vanillaClient.auth.switchStaff.mutate(input);
 
       if (!isCurrent()) return;
       try {
@@ -633,11 +657,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
         // The server already replaced the httpOnly refresh cookie. Keeping the
         // old UI identity after a local adoption failure would create a split
         // brain, so fail closed to the full login screen.
-        if (isHubClientAuth()) {
+        if (isHubClientAuth() || isPackagedLocalAuth()) {
           try {
-            await clearHubSession();
+            if (isHubClientAuth()) await clearHubSession();
+            else await clearLocal();
           } catch (clearErr) {
-            console.warn('Store Hub session clear failed after staff handoff:', clearErr);
+            console.warn('Desktop session clear failed after staff handoff:', clearErr);
           }
         }
         if (!isCurrent()) return;
@@ -661,6 +686,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       if (isHubClientAuth()) {
         await logoutFromHub();
+      } else if (isPackagedLocalAuth()) {
+        await logoutLocal();
       } else {
         await vanillaClient.auth.logout.mutate();
       }
@@ -672,7 +699,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // operator can reconnect. The server transaction may have rolled back,
       // leaving an active claim that listDrafts can recover after re-login.
       console.warn('auth.logout server call failed; preserving draft recovery state:', err);
-      clearLocalSession({ preserveWorkspaces: true });
+      clearLocalSession({ preserveWorkspaces: true, preserveLocalCredential: true });
       setError(err);
     } finally {
       if (isCurrent()) {
@@ -707,6 +734,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
       try {
         if (isHubClientAuth()) await clearHubSession();
+        else if (isPackagedLocalAuth()) await clearLocal();
         else await clearDesktopSession();
       } catch (error) {
         // The server has already revoked this credential and parked its work.

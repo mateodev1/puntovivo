@@ -42,12 +42,14 @@
     "map": {
       "kicker": "Step 2",
       "title": "Map your columns",
-      "description": "Confirm the detected columns. Product name and SKU are required; every other field can be left unmapped.",
+      "description": "Confirm the detected columns. Creating products requires name and SKU; to update by ID, map the ID and only the fields you want to change.",
       "notMapped": "Do not import",
       "decimalFormat": "Number format",
       "costCandidates": "This file has several price columns ({{columns}}). Choose which one is your cost.",
       "upsertNote": "In a supplier list, the file prices are your cost. The sale price of existing products is not changed and new products start at 0 unless you map a column.",
-      "costRequired": "Map the cost column to continue."
+      "catalogNote": "With a Product ID, this row only updates that product. You can change name, description, SKU, cost, price and tax; keep the exported ID and version unchanged.",
+      "costRequired": "Map the cost column to continue.",
+      "repeatedIdentity": "The file repeats a product ID or SKU across rows. Correct it before previewing, including rows in separate batches."
     },
     "preview": {
       "kicker": "Step 3",
@@ -56,6 +58,8 @@
     }
   },
   "fields": {
+    "productId": "Product ID",
+    "productVersion": "Product version",
     "name": "Product name",
     "sku": "SKU",
     "description": "Description",
@@ -108,6 +112,10 @@
     "unchanged": "Unchanged"
   },
   "issues": {
+    "product_id_not_found": "This ID does not identify a product in this business; the row will not be created or matched by SKU",
+    "product_id_requires_update": "Select update mode to import rows with a Product ID",
+    "duplicate_file_product_id": "Product ID is repeated in this file",
+    "invalid_product_version": "Product version is invalid",
     "required": "Required value is missing",
     "too_long": "Value exceeds the allowed length",
     "invalid_number": "Number format is not valid",
@@ -147,6 +155,9 @@
     "newProduct": "New product",
     "noChanges": "No changes",
     "costChange": "Cost {{from}} → {{to}} ({{percent}})",
+    "nameChange": "Name {{from}} → {{to}}",
+    "skuChange": "SKU {{from}} → {{to}}",
+    "descriptionChange": "Description {{from}} → {{to}}",
     "priceChange": "Price {{from}} → {{to}}",
     "taxChange": "Tax {{from}}% → {{to}}%",
     "filter": "Show",

@@ -9,7 +9,7 @@
  */
 import { TRPCError } from '@trpc/server';
 import { roundQuantity } from '@puntovivo/shared/unit-math';
-import { and, eq, isNotNull, ne, or, sql } from 'drizzle-orm';
+import { and, asc, eq, isNotNull, ne, or, sql } from 'drizzle-orm';
 import type { AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
 
 import { tenantProcedure } from '../../middleware/tenant.js';
@@ -51,13 +51,26 @@ function literalContains(column: AnySQLiteColumn, value: string) {
   return sql`${column} LIKE ${`%${escaped}%`} ESCAPE '!'`;
 }
 
+function literalPrefix(column: AnySQLiteColumn, value: string) {
+  const escaped = value.replaceAll('!', '!!').replaceAll('%', '!%').replaceAll('_', '!_');
+  return sql`${column} LIKE ${`${escaped}%`} ESCAPE '!'`;
+}
+
 export const productQueryProcedures = {
   /**
    * List products for the current tenant with pagination and filtering
    */
   list: tenantProcedure.input(listProductsInput).query(async ({ ctx, input }) => {
-    const { page, perPage, search, categoryId, isActive, includeVariantParents, pharmacyOnly } =
-      input;
+    const {
+      page,
+      perPage,
+      search,
+      skuPrefix,
+      categoryId,
+      isActive,
+      includeVariantParents,
+      pharmacyOnly,
+    } = input;
     const offset = (page - 1) * perPage;
     // Regulated metadata can only match a tenant that owns pharmacy profiles.
     // Everyone else skips the per-row join probe and four extra LIKE scans,
@@ -78,6 +91,7 @@ export const productQueryProcedures = {
         or(
           literalContains(products.name, search),
           literalContains(products.sku, search),
+          literalContains(products.description, search),
           ...(searchesPharmacyMetadata
             ? [
                 literalContains(pharmacyProductProfiles.activeIngredient, search),
@@ -88,6 +102,9 @@ export const productQueryProcedures = {
             : [])
         )!
       );
+    }
+    if (skuPrefix) {
+      conditions.push(literalPrefix(products.sku, skuPrefix));
     }
     if (categoryId !== undefined) {
       conditions.push(eq(products.categoryId, categoryId));
@@ -114,6 +131,7 @@ export const productQueryProcedures = {
         // it probes only rows that already passed the product filters.
         .leftJoin(pharmacyProductProfiles, pharmacyProfileJoin)
         .where(where)
+        .orderBy(asc(products.sku), asc(products.id))
         .limit(perPage)
         .offset(offset)
         .all(),

@@ -34,7 +34,12 @@ import {
 // sync:* handler (see ./register.ts) throws SESSION_NOT_REGISTERED so
 // the renderer can never reach the SQLite store with a tenantId of its
 // choosing.
-export function registerSessionIpc(options: { hubAuthSession?: HubAuthSession } = {}): void {
+export function registerSessionIpc(
+  options: {
+    hubAuthSession?: HubAuthSession;
+    localAuthSession?: HubAuthSession;
+  } = {}
+): void {
   const realtimeHandles = new Map<
     string,
     { handle: HubRealtimeHandle; removeDestroyedListener: () => void }
@@ -96,6 +101,42 @@ export function registerSessionIpc(options: { hubAuthSession?: HubAuthSession } 
     closeRealtimeHandles();
     desktopSession.clear();
     return { ok: true };
+  });
+  ipcMain.handle('session:local-login', (_event, input: HubLoginInput) =>
+    captureHubAuthIpc(async () => {
+      if (!options.localAuthSession) throw new Error('Local desktop authentication is unavailable');
+      return options.localAuthSession.login(input);
+    })
+  );
+  ipcMain.handle('session:local-refresh', () =>
+    captureHubAuthIpc(async () => {
+      if (!options.localAuthSession) throw new Error('Local desktop authentication is unavailable');
+      return options.localAuthSession.refresh();
+    })
+  );
+  ipcMain.handle('session:local-switch-staff', (_event, input: HubSwitchStaffInput) =>
+    captureHubAuthIpc(async () => {
+      if (!options.localAuthSession) throw new Error('Local desktop authentication is unavailable');
+      await options.localAuthSession.refresh();
+      return options.localAuthSession.switchStaff(input);
+    })
+  );
+  ipcMain.handle('session:local-logout', () =>
+    captureHubAuthIpc(async () => {
+      if (!options.localAuthSession) throw new Error('Local desktop authentication is unavailable');
+      // Unlike browser logout, this IPC call does not pass through the 401
+      // retry link. Renew before parking drafts so an expired access grant
+      // cannot turn an intentional logout into an unrecoverable stale session.
+      await options.localAuthSession.refresh();
+      await options.localAuthSession.logout();
+      desktopSession.clear();
+      return { ok: true as const };
+    })
+  );
+  ipcMain.handle('session:local-clear', () => {
+    desktopSession.clear();
+    options.localAuthSession?.clear();
+    return { ok: true as const };
   });
   ipcMain.handle('session:hub-login', (_event, input: HubLoginInput) =>
     captureHubAuthIpc(async () => {
