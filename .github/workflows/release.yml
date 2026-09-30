@@ -41,6 +41,8 @@ on:
 env:
   NODE_VERSION: '24'
   RELEASE_TAG: ${{ inputs.tag }}
+  # verify-draft and publish-release run gh without a checkout.
+  GH_REPO: ${{ github.repository }}
   GIT_CONFIG_COUNT: '2'
   GIT_CONFIG_KEY_0: init.defaultBranch
   GIT_CONFIG_VALUE_0: main
