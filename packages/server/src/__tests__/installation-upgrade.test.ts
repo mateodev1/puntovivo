@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import Database from 'better-sqlite3';
 import { describe, expect, it } from 'vitest';
+import { seedHistoricalDefaults } from './utils/historicalSeed.js';
 import { closeDatabase, initDatabase } from '../db/index.js';
 import { users, installationSetup } from '../db/schema.js';
 import { ensureMigrationBaseline } from '../db/migration-baseline.js';
@@ -46,22 +47,35 @@ describe('first-owner historical adoption', () => {
         writeFileSync(journalPath, JSON.stringify(journal));
         const old = await initDatabase({
           dbPath,
-          seedData: true,
+          seedData: false,
           migrationsFolder: prefix,
           ...encryption,
         });
-        const before = old.select().from(users).all();
+        await seedHistoricalDefaults(old);
+        // Historical schema predates `pin_failed_attempts`, so compare the
+        // identity and credential columns that exist on both sides.
+        const identityColumns = {
+          id: users.id,
+          tenantId: users.tenantId,
+          email: users.email,
+          passwordHash: users.passwordHash,
+          staffPinHash: users.staffPinHash,
+          role: users.role,
+          isActive: users.isActive,
+          sessionVersion: users.sessionVersion,
+        };
+        const before = old.select(identityColumns).from(users).all();
         expect(before.length).toBeGreaterThan(0);
         closeDatabase();
         const current = await initDatabase({ dbPath, seedData: false, ...encryption });
-        expect(current.select().from(users).all()).toEqual(before);
+        expect(current.select(identityColumns).from(users).all()).toEqual(before);
         expect(current.select().from(installationSetup).get()?.completionKind).toBe('adopted');
         const setup = createInstallationSetup(current);
         expect(setup.getToken()).toBeNull();
         setup.dispose();
         closeDatabase();
         const restarted = await initDatabase({ dbPath, seedData: false, ...encryption });
-        expect(restarted.select().from(users).all()).toEqual(before);
+        expect(restarted.select(identityColumns).from(users).all()).toEqual(before);
         expect(restarted.select().from(installationSetup).all()).toHaveLength(1);
       } finally {
         closeDatabase();

@@ -6,27 +6,34 @@ import {
   verifyStaffPin,
   warmUpStaffPinSecurity,
 } from '../security/staffPins.js';
+import { hashPasswordSecurely } from '../security/passwords.js';
 
 describe(' staff PIN security', () => {
-  it('accepts exactly six digits and rejects malformed values', () => {
-    expect(isValidStaffPin('123456')).toBe(true);
+  it('accepts exactly four digits and rejects malformed values', () => {
+    expect(isValidStaffPin('1234')).toBe(true);
+    expect(isValidStaffPin('123')).toBe(false);
     expect(isValidStaffPin('12345')).toBe(false);
-    expect(isValidStaffPin('1234567')).toBe(false);
-    expect(isValidStaffPin('12a456')).toBe(false);
+    expect(isValidStaffPin('123456')).toBe(false);
+    expect(isValidStaffPin('12a4')).toBe(false);
+  });
+
+  it('hash from v1 domain does not verify', async () => {
+    const legacyHash = await hashPasswordSecurely('puntovivo:staff-pin:v1:1234');
+    await expect(verifyStaffPin(legacyHash, '1234')).resolves.toBe(false);
   });
 
   it('stores a one-way Argon2id hash with domain separation', async () => {
-    const hash = await hashStaffPin('123456');
+    const hash = await hashStaffPin('1234');
     expect(hash).toMatch(/^\$argon2id\$/);
-    expect(hash).not.toContain('123456');
-    await expect(verifyStaffPin(hash, '123456')).resolves.toBe(true);
-    await expect(verifyStaffPin(hash, '654321')).resolves.toBe(false);
+    expect(hash).not.toContain('1234');
+    await expect(verifyStaffPin(hash, '1234')).resolves.toBe(true);
+    await expect(verifyStaffPin(hash, '4321')).resolves.toBe(false);
   });
 
   it('rejects invalid PIN shapes before hashing or verification', async () => {
-    await expect(hashStaffPin('12345')).rejects.toThrow('exactly 6 digits');
-    const hash = await hashStaffPin('123456');
-    await expect(verifyStaffPin(hash, '12345')).resolves.toBe(false);
+    await expect(hashStaffPin('123')).rejects.toThrow('exactly 4 digits');
+    const hash = await hashStaffPin('1234');
+    await expect(verifyStaffPin(hash, '123')).resolves.toBe(false);
   });
 
   it('prewarms and reuses the unavailable-target timing hash', async () => {

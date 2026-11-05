@@ -36,7 +36,7 @@ describe('sanitizePayload — key matching', () => {
 
   it('redacts staff PIN plaintext and hash shapes', () => {
     const { clean, redactedKeys } = sanitizePayload({
-      pin: '246810',
+      pin: '2468',
       staffPinHash: '$argon2id$secret',
       staff_pin_hash: '$argon2id$database-secret',
       userId: 'user-1',

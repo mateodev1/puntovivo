@@ -6,6 +6,7 @@ import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:f
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { seedHistoricalDefaults } from './utils/historicalSeed.js';
 import { closeDatabase, initDatabase } from '../db/index.js';
 import {
   restaurantCheckLines,
@@ -56,11 +57,12 @@ describe('restaurant catalog historical upgrade', () => {
         writeFileSync(journalPath, JSON.stringify(journal));
         const old = await initDatabase({
           dbPath,
-          seedData: true,
+          seedData: false,
           migrationsFolder: prefix,
           ...encryption,
         });
-        const owner = old.select().from(users).get()!,
+        await seedHistoricalDefaults(old);
+        const owner = old.select({ id: users.id, tenantId: users.tenantId }).from(users).get()!,
           site = old.select().from(sites).get()!,
           tenantId = owner.tenantId;
         // Historical fixtures use the historical column list, not today's

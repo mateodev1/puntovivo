@@ -1613,6 +1613,48 @@ describe('Versioned Drizzle migrations', () => {
     expectMigrationsMatchJournal(listMigrationRows(liveDb.$client));
   });
 
+  it('0091 clears staff pin hashes and adds pin_failed_attempts', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'puntovivo-migrations-staff-pin-'));
+    createdPaths.push(dir);
+    const dbPath = join(dir, 'staff-pin.db');
+    const historicalMigrations = join(dir, 'migrations-through-0090');
+    copyMigrationPrefix(historicalMigrations, 91);
+
+    await initDatabase({ dbPath, seedData: false, migrationsFolder: historicalMigrations });
+    closeDatabase();
+
+    const legacy = new Database(dbPath);
+    legacy.exec(`
+      INSERT INTO tenants (id, name, slug) VALUES ('pin-tenant', 'Pin Tenant', 'pin-tenant');
+      INSERT INTO users (id, tenant_id, email, name, password_hash, staff_pin_hash, role) VALUES
+        ('pin-user', 'pin-tenant', 'pin@example.test', 'Pin User', 'test-hash',
+         '$argon2id$legacy-six-digit-hash', 'cashier'),
+        ('no-pin-user', 'pin-tenant', 'nopin@example.test', 'No Pin User', 'test-hash',
+         NULL, 'cashier');
+    `);
+    expect(
+      legacy
+        .prepare("SELECT 1 FROM pragma_table_info('users') WHERE name = 'pin_failed_attempts'")
+        .get()
+    ).toBeUndefined();
+    legacy.close();
+
+    await initDatabase({ dbPath, seedData: false });
+    closeDatabase();
+
+    const upgraded = new Database(dbPath, { readonly: true });
+    const rows = upgraded
+      .prepare(
+        'SELECT id, staff_pin_hash, pin_failed_attempts FROM users WHERE tenant_id = ? ORDER BY id'
+      )
+      .all('pin-tenant');
+    upgraded.close();
+    expect(rows).toEqual([
+      { id: 'no-pin-user', staff_pin_hash: null, pin_failed_attempts: 0 },
+      { id: 'pin-user', staff_pin_hash: null, pin_failed_attempts: 0 },
+    ]);
+  });
+
   it('upgrades 0057 restaurant drafts without inventing historical service detail', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'puntovivo-migrations-restaurant-service-'));
     createdPaths.push(dir);

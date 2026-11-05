@@ -200,6 +200,7 @@ export function ensureMigrationBaseline(sqlite: Database.Database, migrationsFol
         '0088_purchase_carrying_values',
         '0089_serial_carrying_values',
         '0090_inventory_value_constraints',
+        '0091_staff_pin_four_digits',
       ].includes(entry.tag)
     ) {
       const tables = sqlite

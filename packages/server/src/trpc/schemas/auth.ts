@@ -48,7 +48,7 @@ export const changePasswordInput = z
 
 export const staffPinSchema = z
   .string()
-  .regex(STAFF_PIN_PATTERN, 'Staff PIN must contain exactly 6 digits');
+  .regex(STAFF_PIN_PATTERN, 'Staff PIN must contain exactly 4 digits');
 
 export const switchStaffInput = z
   .object({

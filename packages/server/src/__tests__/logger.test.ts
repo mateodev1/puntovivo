@@ -287,7 +287,7 @@ describe('logger', () => {
             tenantId: 't-99',
             details: {
               password: 'plaintext',
-              pin: '246810',
+              pin: '2468',
               staffPinHash: '$argon2id$leak',
               staff_pin_hash: '$argon2id$database-leak',
               token: 'tok',

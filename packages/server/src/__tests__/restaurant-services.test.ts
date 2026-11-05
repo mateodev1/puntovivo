@@ -636,7 +636,7 @@ describe('restaurantServices.openCheck', () => {
       email: `restaurant-target-${nanoid(8)}@example.test`,
       name: 'Caja siguiente',
       passwordHash: 'not-used-by-router-tests',
-      staffPinHash: await hashStaffPin('246810'),
+      staffPinHash: await hashStaffPin('2468'),
       role: 'cashier',
       isActive: true,
       createdAt: now,
@@ -654,7 +654,7 @@ describe('restaurantServices.openCheck', () => {
       .get();
     if (!identityBefore || !sourceIdentity) throw new Error('Expected source device identity');
 
-    await sourceCaller.auth.switchStaff({ targetUserId: targetId, pin: '246810' });
+    await sourceCaller.auth.switchStaff({ targetUserId: targetId, pin: '2468' });
 
     const parked = await db.select().from(sales).where(eq(sales.id, opened.id)).get();
     expect(parked).toMatchObject({
@@ -732,7 +732,7 @@ describe('restaurantServices.openCheck', () => {
       email: `restaurant-switch-race-${nanoid(8)}@example.test`,
       name: 'Caja carrera',
       passwordHash: 'not-used-by-router-tests',
-      staffPinHash: await hashStaffPin('135790'),
+      staffPinHash: await hashStaffPin('1357'),
       role: 'cashier',
       isActive: true,
       createdAt: now,
@@ -747,7 +747,7 @@ describe('restaurantServices.openCheck', () => {
 
     const switchPromise = appRouter
       .createCaller(freshHandoffCashier({ sessionVersion: source.sessionVersion }))
-      .auth.switchStaff({ targetUserId: targetId, pin: '135790' });
+      .auth.switchStaff({ targetUserId: targetId, pin: '1357' });
     await db
       .update(users)
       .set({ sessionVersion: source.sessionVersion + 1 })
@@ -815,14 +815,14 @@ describe('restaurantServices.openCheck', () => {
       email: `restaurant-device-target-${nanoid(8)}@example.test`,
       name: 'Caja relevo dispositivo',
       passwordHash: 'not-used-by-router-tests',
-      staffPinHash: await hashStaffPin('864209'),
+      staffPinHash: await hashStaffPin('8642'),
       role: 'cashier',
       isActive: true,
       createdAt: now,
       updatedAt: now,
     });
 
-    await firstDeviceCaller.auth.switchStaff({ targetUserId: targetId, pin: '864209' });
+    await firstDeviceCaller.auth.switchStaff({ targetUserId: targetId, pin: '8642' });
 
     expect(await db.select().from(sales).where(eq(sales.id, firstDraft.id)).get()).toMatchObject({
       suspendedBy: handoffCashierId,
