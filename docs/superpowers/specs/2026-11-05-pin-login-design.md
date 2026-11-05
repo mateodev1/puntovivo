@@ -55,7 +55,7 @@ as the everyday way in.
   an additional throttle.
 
 ### New procedures
-- `auth.pinLoginCandidates` (query): returns `{ id, name }` of active users in
+- `auth.pinLoginCandidates` (mutation, so it fits the POST-only local transport): returns `{ id, name }` of active users in
   the tenant with a non-null, unlocked PIN. Local-capability gated (below).
 - `auth.pinLogin` (mutation): input `{ userId, pin }`. Verifies PIN, then
   issues access + refresh tokens exactly like `auth.login`, with
