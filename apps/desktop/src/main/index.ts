@@ -150,6 +150,7 @@ const localAuthSession =
         getDeviceId: () => readDeviceIdFromDir(app.getPath('userData')),
         safeStorage,
         allowInsecureLoopback: true,
+        allowPinLogin: true,
         fetchImpl: createLocalAuthFetch(getServer, localAuthOrigin),
       })
     : undefined;

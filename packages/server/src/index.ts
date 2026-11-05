@@ -93,3 +93,6 @@ export {
   type EscPosTransport,
   type EscPosTransportConfig,
 } from './services/peripherals/escpos/transport.js';
+
+// The desktop main injects the per-boot local-auth capability under this name.
+export { LOCAL_AUTH_CAPABILITY_HEADER } from './security/localAuthCapability.js';

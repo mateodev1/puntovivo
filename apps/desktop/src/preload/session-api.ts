@@ -6,6 +6,8 @@ import type {
   HubApiResponse,
   HubAuthIpcResult,
   HubLoginInput,
+  HubPinLoginCandidate,
+  HubPinLoginInput,
   HubRealtimeInput,
   HubRealtimeMessage,
   HubSwitchStaffInput,
@@ -31,6 +33,9 @@ export interface SessionAPI {
   resume: () => Promise<{ token: string | null }>;
   clear: () => Promise<{ ok: true }>;
   loginLocal: (input: HubLoginInput) => Promise<HubAuthIpcResult<HubAccessGrant>>;
+  /** Present only when a local desktop auth session exists (not Hub clients). */
+  pinLoginCandidatesLocal?: () => Promise<HubAuthIpcResult<HubPinLoginCandidate[]>>;
+  pinLoginLocal?: (input: HubPinLoginInput) => Promise<HubAuthIpcResult<HubAccessGrant>>;
   refreshLocal: () => Promise<HubAuthIpcResult<HubAccessGrant>>;
   switchStaffLocal: (input: HubSwitchStaffInput) => Promise<HubAuthIpcResult<HubAccessGrant>>;
   logoutLocal: () => Promise<HubAuthIpcResult<{ ok: true }>>;
@@ -70,7 +75,22 @@ export function createSessionApi(): SessionAPI {
     }
   };
 
+  const pinLoginSupported = ((): boolean => {
+    try {
+      return ipcRenderer.sendSync('session:local-pin-supported') === true;
+    } catch {
+      return false;
+    }
+  })();
+
   return {
+    ...(pinLoginSupported
+      ? {
+          pinLoginCandidatesLocal: () => ipcRenderer.invoke('session:local-pin-candidates'),
+          pinLoginLocal: (input: HubPinLoginInput) =>
+            ipcRenderer.invoke('session:local-pin-login', input),
+        }
+      : {}),
     completeSetup: input => ipcRenderer.invoke('session:complete-setup', input),
     register: (accessToken: string) => ipcRenderer.invoke('session:register', accessToken),
     resume: () => ipcRenderer.invoke('session:resume'),

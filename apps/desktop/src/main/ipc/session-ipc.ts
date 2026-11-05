@@ -22,10 +22,23 @@ import {
   type HubApiRequest,
   type HubAuthSession,
   type HubLoginInput,
+  type HubPinLoginInput,
   type HubRealtimeHandle,
   type HubRealtimeInput,
   type HubSwitchStaffInput,
 } from '../session/hub-auth-session.js';
+
+function parsePinLoginInput(input: unknown): HubPinLoginInput {
+  if (!input || typeof input !== 'object') throw new Error('PIN login input is invalid');
+  const { userId, pin } = input as { userId?: unknown; pin?: unknown };
+  if (typeof userId !== 'string' || userId.length === 0 || userId.length > 128) {
+    throw new Error('PIN login input is invalid');
+  }
+  if (typeof pin !== 'string' || !/^\d{4}$/.test(pin)) {
+    throw new Error('PIN login input is invalid');
+  }
+  return { userId, pin };
+}
 
 // vector 1 — session lifecycle. `session:register` is called
 // by the renderer's AuthProvider after a successful login (or after a
@@ -106,6 +119,23 @@ export function registerSessionIpc(
     captureHubAuthIpc(async () => {
       if (!options.localAuthSession) throw new Error('Local desktop authentication is unavailable');
       return options.localAuthSession.login(input);
+    })
+  );
+  // The preload asks synchronously at load time whether PIN login exists, so
+  // it can omit the functions for Hub clients (no local session).
+  ipcMain.on('session:local-pin-supported', event => {
+    event.returnValue = Boolean(options.localAuthSession);
+  });
+  ipcMain.handle('session:local-pin-candidates', () =>
+    captureHubAuthIpc(async () => {
+      if (!options.localAuthSession) throw new Error('Local desktop authentication is unavailable');
+      return options.localAuthSession.pinLoginCandidates();
+    })
+  );
+  ipcMain.handle('session:local-pin-login', (_event, input: unknown) =>
+    captureHubAuthIpc(async () => {
+      if (!options.localAuthSession) throw new Error('Local desktop authentication is unavailable');
+      return options.localAuthSession.pinLogin(parsePinLoginInput(input));
     })
   );
   ipcMain.handle('session:local-refresh', () =>

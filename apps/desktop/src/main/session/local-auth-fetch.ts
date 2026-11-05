@@ -1,11 +1,16 @@
-import type { PuntovivoServer } from '@puntovivo/server';
+import { LOCAL_AUTH_CAPABILITY_HEADER, type PuntovivoServer } from '@puntovivo/server';
 
 const AUTH_PATHS = new Set([
   '/api/trpc/auth.login',
   '/api/trpc/auth.refresh',
   '/api/trpc/auth.logout',
   '/api/trpc/auth.switchStaff',
+  '/api/trpc/auth.pinLogin',
+  '/api/trpc/auth.pinLoginCandidates',
 ]);
+
+/** Only these paths carry the per-boot local-auth capability. */
+const PIN_PATHS = new Set(['/api/trpc/auth.pinLogin', '/api/trpc/auth.pinLoginCandidates']);
 
 /** Keep packaged-local auth inside main and the embedded Fastify instance. */
 export function createLocalAuthFetch(
@@ -19,7 +24,13 @@ export function createLocalAuthFetch(
     }
     const server = getActiveServer();
     if (!server) throw new Error('The embedded server is not available');
-    const headers = Object.fromEntries(new Headers(init?.headers).entries());
+    const requestHeaders = new Headers(init?.headers);
+    // Never forward a caller-supplied capability; only main may attach it.
+    requestHeaders.delete(LOCAL_AUTH_CAPABILITY_HEADER);
+    if (PIN_PATHS.has(url.pathname)) {
+      requestHeaders.set(LOCAL_AUTH_CAPABILITY_HEADER, server.getLocalAuthCapability());
+    }
+    const headers = Object.fromEntries(requestHeaders.entries());
     const reply = await server.app.inject({
       method: (init?.method ?? 'GET') as 'GET' | 'POST',
       url: `${url.pathname}${url.search}`,
