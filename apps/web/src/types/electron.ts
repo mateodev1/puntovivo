@@ -131,7 +131,7 @@ export interface ElectronAPI {
   getBackupEncryptionKey?: () => Promise<{
     success: boolean;
     key?: string;
-    error?: 'audit_unavailable' | 'key_unavailable';
+    error?: 'audit_unavailable' | 'key_unavailable' | 'password_session_required';
   }>;
   /** admin-gated offline rotation of this install's SQLCipher key. */
   rotateDbEncryptionKey?: () => Promise<{

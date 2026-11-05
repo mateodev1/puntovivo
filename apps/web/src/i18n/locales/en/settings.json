@@ -549,7 +549,8 @@
         "done": "Done",
         "failed": "Could not retrieve the backup key",
         "audit_unavailable": "The key was withheld because the audit record could not be written. Fix the database issue and try again.",
-        "key_unavailable": "The backup key could not be read from the system keychain."
+        "key_unavailable": "The backup key could not be read from the system keychain.",
+        "password_session_required": "Sign in with your password to reveal the backup key. PIN sessions cannot reveal it."
       },
       "rotateKey": {
         "button": "Rotate encryption key",

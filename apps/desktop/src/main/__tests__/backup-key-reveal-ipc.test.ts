@@ -37,6 +37,34 @@ describe('backup encryption key reveal IPC', () => {
     assert.equal(resolved, false);
   });
 
+  it('refuses a PIN session before touching the key or the audit trail', async () => {
+    await registerRole('admin', 'staff_pin');
+    let resolved = false;
+    const audit: BackupKeyRevealAuditInput[] = [];
+
+    const result = await handleGetBackupEncryptionKey(
+      makeBackupIpcDeps({
+        resolveDatabaseEncryptionKey: async () => {
+          resolved = true;
+          return TEST_KEY;
+        },
+        recordBackupKeyRevealAudit: input => audit.push(input),
+      })
+    );
+
+    assert.deepEqual(result, { success: false, error: 'password_session_required' });
+    assert.equal(resolved, false);
+    assert.deepEqual(audit, []);
+  });
+
+  it('still reveals the key to an admin with an explicit password session', async () => {
+    await registerRole('admin', 'password');
+    const result = await handleGetBackupEncryptionKey(
+      makeBackupIpcDeps({ resolveDatabaseEncryptionKey: async () => TEST_KEY })
+    );
+    assert.deepEqual(result, { success: true, key: TEST_KEY });
+  });
+
   it('reveals the key to an admin and records tenant-scoped evidence first', async () => {
     await registerRole('admin');
     const audit: BackupKeyRevealAuditInput[] = [];

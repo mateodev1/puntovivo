@@ -7,7 +7,10 @@
 import type { AuthTokenPayload } from '@puntovivo/server';
 import { register } from '../../session/desktopSession.ts';
 
-export async function registerRole(role: AuthTokenPayload['role']): Promise<void> {
+export async function registerRole(
+  role: AuthTokenPayload['role'],
+  authMethod?: AuthTokenPayload['authMethod']
+): Promise<void> {
   await register('valid-token', async () => ({
     userId: `user-${role}`,
     tenantId: 'tenant-1',
@@ -15,5 +18,6 @@ export async function registerRole(role: AuthTokenPayload['role']): Promise<void
     role,
     sessionVersion: 1,
     tokenType: 'access' as const,
+    ...(authMethod ? { authMethod } : {}),
   }));
 }

@@ -246,6 +246,7 @@ function toIdentity(user: HubAuthUser, accessToken: string): DesktopSessionIdent
         email?: unknown;
         role?: unknown;
         sessionVersion?: unknown;
+        authMethod?: unknown;
       };
       if (
         typeof payload.userId === 'string' &&
@@ -261,6 +262,7 @@ function toIdentity(user: HubAuthUser, accessToken: string): DesktopSessionIdent
           email: payload.email,
           role: payload.role,
           sessionVersion: payload.sessionVersion,
+          ...(payload.authMethod === 'staff_pin' ? { authMethod: 'staff_pin' } : {}),
         };
       }
     }
@@ -283,6 +285,7 @@ function toIdentity(user: HubAuthUser, accessToken: string): DesktopSessionIdent
     email: user.email,
     role: user.role,
     sessionVersion: tokenIdentity?.sessionVersion ?? 0,
+    ...(tokenIdentity?.authMethod ? { authMethod: tokenIdentity.authMethod } : {}),
   };
 }
 
@@ -299,6 +302,7 @@ function refreshIdentity(
       email?: unknown;
       role?: unknown;
       sessionVersion?: unknown;
+      authMethod?: unknown;
     };
     if (
       typeof payload.userId !== 'string' ||
@@ -319,6 +323,7 @@ function refreshIdentity(
       email: payload.email,
       role: payload.role,
       sessionVersion: payload.sessionVersion,
+      ...(payload.authMethod === 'staff_pin' ? { authMethod: 'staff_pin' } : {}),
     };
   } catch (error) {
     if (error instanceof Error && error.message.startsWith('Store Hub returned')) throw error;

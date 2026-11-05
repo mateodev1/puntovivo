@@ -549,7 +549,8 @@
         "done": "Listo",
         "failed": "No se pudo obtener la clave de respaldo",
         "audit_unavailable": "La clave se retuvo porque no se pudo escribir el registro de auditoría. Corrige el problema de la base de datos e intenta de nuevo.",
-        "key_unavailable": "No se pudo leer la clave de respaldos del llavero del sistema."
+        "key_unavailable": "No se pudo leer la clave de respaldos del llavero del sistema.",
+        "password_session_required": "Inicie sesión con su contraseña para ver la clave de respaldos. Las sesiones con PIN no pueden verla."
       },
       "rotateKey": {
         "button": "Rotar clave de cifrado",
