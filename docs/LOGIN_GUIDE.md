@@ -1,6 +1,6 @@
 # Login and Access Guide
 
-> Updated: September 6, 2026
+> Updated: November 5, 2026
 
 ## Authentication Model
 
@@ -101,6 +101,24 @@ Source:
 - Admins must use the same strong password policy when creating users.
 - Admin password resets also require the same strong password policy.
 - If an admin resets their own password from the users screen, the app signs them out immediately.
+
+## PIN sign-in
+
+Cashiers and other staff can sign in with a 4-digit PIN instead of a password.
+
+- Availability: the packaged desktop app in local mode only. It is not offered
+  on Hub clients, the standalone web app, or `dev:desktop`.
+- One PIN per user. The same PIN is used for PIN sign-in, staff switching, and
+  manager approvals.
+- An admin sets or resets a PIN from the Users page. Users can also set their
+  own from the user menu via `My PIN`, which requires their current password.
+- Five consecutive wrong PINs lock the PIN everywhere (sign-in, staff switch,
+  manager approvals). A password sign-in or an admin PIN reset unlocks it.
+- Attempts are also rate limited per target (5 per 15 minutes), so the app may
+  report "rate limited" before it shows the lock message.
+- PIN sessions last at most 8 hours; after that the user signs in again.
+- Upgrading clears all existing 6-digit PINs. Each must be set again as a
+  4-digit PIN.
 
 ## Current Auth Procedures
 
