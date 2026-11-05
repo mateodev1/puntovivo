@@ -10,6 +10,13 @@
 // empty config on the CI runners.
 import { VitePlugin } from '@electron-forge/plugin-vite';
 
+// plugin-vite builds the main/preload bundles in this process, and Vite sets
+// process.env.NODE_ENV to "production" for builds when it is unset. The
+// Electron dev process spawned afterwards inherits that value, so the embedded
+// server would boot the dev loop as production (and refuse dev verbose
+// logging). Pin the dev default here; an explicit NODE_ENV still wins.
+process.env.NODE_ENV ??= 'development';
+
 const config = {
   plugins: [
     new VitePlugin({
