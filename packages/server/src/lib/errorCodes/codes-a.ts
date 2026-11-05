@@ -92,6 +92,8 @@ export const SERVER_ERROR_CODES_A = {
   AUTH_RATE_LIMIT_EXCEEDED: 'AUTH_RATE_LIMIT_EXCEEDED',
   /** the four-digit staff PIN did not match. */
   AUTH_STAFF_PIN_INVALID: 'AUTH_STAFF_PIN_INVALID',
+  /** PIN login was attempted without the per-boot local desktop capability (not the in-process desktop transport). */
+  AUTH_PIN_LOGIN_UNAVAILABLE: 'AUTH_PIN_LOGIN_UNAVAILABLE',
   /** Five consecutive PIN failures locked the PIN; a password login or admin PIN reset clears it. */
   AUTH_PIN_LOCKED: 'AUTH_PIN_LOCKED',
   /** The authenticated user/device generation changed while a command was in flight. */

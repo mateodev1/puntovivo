@@ -47,6 +47,7 @@ const SENSITIVE_KEYS: ReadonlySet<string> = new Set([
   'refreshtoken',
   'jwt',
   'authorization',
+  'xpuntovivolocalauth',
   'authheader',
   'sessiontoken',
   // NOTE: `sessionid` is intentionally NOT redacted. In Puntovivo's

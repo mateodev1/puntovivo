@@ -2,6 +2,10 @@ import {
   createInstallationSetup,
   type InstallationSetupController,
 } from '../services/installation/setup.js';
+import {
+  createLocalAuthCapability,
+  type LocalAuthCapability,
+} from '../security/localAuthCapability.js';
 import { resolveExternalOrderWrappingKey } from '../config/external-order-key.js';
 /**
  * Puntovivo server lifecycle orchestrator.
@@ -245,6 +249,8 @@ async function createOwnedServer(
   // Decorate request with database instance
   app.decorate('db', db);
   app.decorate('installationSetup', installationSetup);
+  const localAuthCapability = createLocalAuthCapability();
+  app.decorate('localAuthCapability', localAuthCapability);
 
   // binary evidence bypasses JSON/tRPC to avoid base64 bloat,
   // but keeps the same live access-token, tenant, and role checks.
@@ -422,6 +428,7 @@ async function createOwnedServer(
     },
     getUrl: () => serverUrl,
     getSetupToken: installationSetup.getToken,
+    getLocalAuthCapability: () => localAuthCapability.token,
   };
 }
 
@@ -430,5 +437,6 @@ declare module 'fastify' {
   interface FastifyInstance {
     db: DatabaseInstance;
     installationSetup: InstallationSetupController;
+    localAuthCapability: LocalAuthCapability;
   }
 }
