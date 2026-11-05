@@ -33,7 +33,7 @@ import { resolvePresetPatch } from '../../services/modules/presets.js';
 import { router } from '../init.js';
 import { managerOrAdminProcedure } from '../middleware/roles.js';
 import { tenantProcedure } from '../middleware/tenant.js';
-import { criticalCommandAdminProcedure } from '../middleware/criticalCommand.js';
+import { criticalCommandPasswordAdminProcedure } from '../middleware/criticalCommand.js';
 import { asCriticalCommandContext } from '../middleware/commandEnvelope.js';
 import { applyModulePresetInput, setModuleActiveInput } from '../schemas/modules.js';
 import { throwServerError } from '../../lib/errorCodes.js';
@@ -136,7 +136,7 @@ export const modulesRouter = router({
    * Always emits an audit log row with the before/after snapshot so
    * the operator can trace activation history.
    */
-  setActive: criticalCommandAdminProcedure
+  setActive: criticalCommandPasswordAdminProcedure
     .input(setModuleActiveInput)
     .mutation(async ({ ctx, input }) => {
       const commandContext = asCriticalCommandContext(ctx);
@@ -235,7 +235,7 @@ export const modulesRouter = router({
    * before/after of every touched module. Idempotent: keys already at the
    * target state are skipped, and an all-no-op apply writes nothing.
    */
-  applyPreset: criticalCommandAdminProcedure
+  applyPreset: criticalCommandPasswordAdminProcedure
     .input(applyModulePresetInput)
     .mutation(async ({ ctx, input }) => {
       const commandContext = asCriticalCommandContext(ctx);

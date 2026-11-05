@@ -19,7 +19,7 @@ export const passwordSessionRequired = middleware(async ({ ctx, next }) => {
     throwServerError({
       trpcCode: 'FORBIDDEN',
       errorCode: 'AUTH_PASSWORD_SESSION_REQUIRED',
-      message: 'Sign in with your password to manage users',
+      message: 'Sign in with your password to perform this action',
     });
   }
   return next();

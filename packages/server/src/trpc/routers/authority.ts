@@ -21,6 +21,7 @@ import {
   adminProcedureWithModule,
   managerOrAdminProcedureWithModule,
 } from '../middleware/modules.js';
+import { passwordSessionRequired } from '../middleware/passwordSession.js';
 import {
   consumePairingCodeInput,
   createPairingCodeInput,
@@ -33,6 +34,7 @@ export const authorityRouter = router({
   ),
 
   createPairingCode: adminProcedureWithModule('operations-center')
+    .use(passwordSessionRequired)
     .input(createPairingCodeInput)
     .mutation(async ({ ctx, input }) =>
       createPairingCode(ctx.db, {
@@ -56,6 +58,7 @@ export const authorityRouter = router({
     ),
 
   revokeDevice: adminProcedureWithModule('operations-center')
+    .use(passwordSessionRequired)
     .input(revokeAuthorityDeviceInput)
     .mutation(async ({ ctx, input }) => {
       const existing = await ctx.db

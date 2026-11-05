@@ -14,7 +14,7 @@
     "AUTH_STAFF_PIN_INVALID": "El cajero seleccionado o el PIN no son válidos.",
     "AUTH_PIN_LOGIN_UNAVAILABLE": "El inicio de sesión con PIN no está disponible aquí. Inicia sesión con tu contraseña.",
     "AUTH_PIN_LOCKED": "Demasiados intentos de PIN incorrectos. Inicia sesión con tu contraseña para desbloquear tu PIN.",
-    "AUTH_PASSWORD_SESSION_REQUIRED": "Inicia sesión con tu contraseña para administrar usuarios.",
+    "AUTH_PASSWORD_SESSION_REQUIRED": "Inicie sesión con su contraseña para realizar esta acción.",
     "AUTH_IDENTITY_CHANGED": "El cajero activo cambió. Inicia sesión de nuevo antes de reintentar esta acción.",
     "AUTH_REFRESH_INVALID": "Tu sesión expiró. Por favor inicia sesión de nuevo.",
     "AUTH_USER_NOT_FOUND": "No se encontró tu cuenta de usuario.",
