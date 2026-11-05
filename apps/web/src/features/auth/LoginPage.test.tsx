@@ -1,11 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import i18n from '@/i18n';
+import userEvent from '@testing-library/user-event';
 import { render } from '@/test/utils';
 
 const authMock = vi.hoisted(() => ({
   error: null as unknown,
   login: vi.fn(),
+}));
+const pinMock = vi.hoisted(() => ({
+  available: false,
+  candidates: vi.fn(),
 }));
 const lastEmailMock = vi.hoisted(() => vi.fn(() => ''));
 
@@ -14,9 +19,15 @@ vi.mock('./authStorage', async () => ({
   getLastDesktopLoginEmail: lastEmailMock,
 }));
 
+vi.mock('./localDesktopAuthTransport', () => ({
+  isPinLoginAvailable: () => pinMock.available,
+  pinLoginCandidatesLocal: pinMock.candidates,
+}));
+
 vi.mock('./AuthProvider', () => ({
   useAuth: () => ({
     login: authMock.login,
+    loginWithPin: vi.fn(),
     isLoading: false,
     error: authMock.error,
   }),
@@ -79,3 +90,38 @@ it.each([
     expect(document.body).not.toHaveTextContent('AUTH_IDENTITY_CHANGED');
   }
 );
+
+describe('LoginPage PIN mode', () => {
+  beforeEach(async () => {
+    await i18n.changeLanguage('en');
+    authMock.error = null;
+    pinMock.available = true;
+    pinMock.candidates.mockReset().mockResolvedValue([{ id: 'u1', name: 'Ana Cashier' }]);
+  });
+
+  it('shows PIN mode by default when available and candidates exist', async () => {
+    render(<LoginPage />);
+    expect(await screen.findByLabelText('Ana Cashier')).toBeInTheDocument();
+    expect(document.querySelector('#password')).toBeNull();
+  });
+
+  it('falls back to password when pin login is unavailable', () => {
+    pinMock.available = false;
+    render(<LoginPage />);
+    expect(document.querySelector('#password')).not.toBeNull();
+    expect(pinMock.candidates).not.toHaveBeenCalled();
+  });
+
+  it('falls back to password when there are no candidates', async () => {
+    pinMock.candidates.mockResolvedValue([]);
+    render(<LoginPage />);
+    await waitFor(() => expect(document.querySelector('#password')).not.toBeNull());
+  });
+
+  it('use password link switches mode', async () => {
+    const user = userEvent.setup();
+    render(<LoginPage />);
+    await user.click(await screen.findByRole('button', { name: /use password/i }));
+    expect(document.querySelector('#password')).not.toBeNull();
+  });
+});

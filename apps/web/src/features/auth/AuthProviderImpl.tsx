@@ -56,6 +56,7 @@ import {
   clearLocal,
   isPackagedLocalAuth,
   loginLocal,
+  pinLoginLocal,
   logoutLocal,
   refreshLocal,
   switchStaffLocal,
@@ -429,8 +430,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     // satisfying exhaustive-deps.
   }, [bootAttempt, clearLocalSession, resetIdentityOwnedState]);
 
-  const login = useCallback(
-    async (credentials: LoginCredentials) => {
+  // Shared session-establishing path for every interactive sign-in method.
+  // `obtainGrant` performs the credential exchange and returns the access grant.
+  const signInWithGrant = useCallback(
+    async (obtainGrant: () => Promise<{ token: string }>) => {
       const generation = ++bootGeneration.current;
       const isCurrent = () => generation === bootGeneration.current;
       setIsLoading(true);
@@ -444,17 +447,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         // needs the shared safe bootstrap to establish the CSRF cookie first.
         await ensureApiBootstrap({ retryAfterFailure: true });
         if (!isCurrent()) return;
-        const authData = isHubClientAuth()
-          ? await loginToHub({
-              email: credentials.email,
-              password: credentials.password,
-            })
-          : isPackagedLocalAuth()
-            ? await loginLocal(credentials)
-            : await vanillaClient.auth.login.mutate({
-                email: credentials.email,
-                password: credentials.password,
-              });
+        const authData = await obtainGrant();
         if (!isCurrent()) return;
         setAccessToken(authData.token);
         // bind the access token to the desktop session
@@ -599,6 +592,29 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // persisted user preference or an untrusted external redirect URL.
     },
     [navigate, location.state, clearLocalSession, resetIdentityOwnedState]
+  );
+
+  const login = useCallback(
+    (credentials: LoginCredentials) =>
+      signInWithGrant(async () =>
+        isHubClientAuth()
+          ? await loginToHub({
+              email: credentials.email,
+              password: credentials.password,
+            })
+          : isPackagedLocalAuth()
+            ? await loginLocal(credentials)
+            : await vanillaClient.auth.login.mutate({
+                email: credentials.email,
+                password: credentials.password,
+              })
+      ),
+    [signInWithGrant]
+  );
+
+  const loginWithPin = useCallback(
+    (input: { userId: string; pin: string }) => signInWithGrant(() => pinLoginLocal(input)),
+    [signInWithGrant]
   );
 
   const switchStaff = useCallback(
@@ -778,6 +794,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       isAuthenticated: !!user,
       isLoading,
       login,
+      loginWithPin,
       switchStaff,
       logout,
       runSessionRevocation,
@@ -801,6 +818,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       tenant,
       isLoading,
       login,
+      loginWithPin,
       switchStaff,
       logout,
       runSessionRevocation,
