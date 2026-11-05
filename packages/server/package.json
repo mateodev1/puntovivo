@@ -69,8 +69,8 @@
     "@fastify/cookie": "^11.1.2",
     "@fastify/cors": "^11.3.0",
     "@fastify/helmet": "^13.1.1",
-    "@fastify/jwt": "^10.2.2",
-    "@fastify/rate-limit": "^11.2.0",
+    "@fastify/jwt": "^10.2.7",
+    "@fastify/rate-limit": "^11.2.2",
     "@puntovivo/shared": "workspace:*",
     "@sentry/node": "^10.71.0",
     "@trpc/server": "^11.18.0",
@@ -79,21 +79,21 @@
     "better-sqlite3": "npm:better-sqlite3-multiple-ciphers@^13.0.3",
     "drizzle-orm": "^0.45.2",
     "fast-xml-parser": "^5.11.0",
-    "fastify": "^5.12.1",
+    "fastify": "^5.12.8",
     "fastify-plugin": "^6.0.0",
     "jspdf": "^4.2.1",
-    "nanoid": "^6.0.1",
+    "nanoid": "^6.0.2",
     "ollama-ai-provider-v2": "^4.0.1",
     "pino": "^10.3.1",
     "qrcode": "^1.5.4",
-    "zod": "^4.4.3"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^24.13.3",
     "@types/qrcode": "^1.5.6",
     "@typescript/native": "npm:typescript@^7.0.2",
-    "@vitest/coverage-v8": "^4.1.11",
+    "@vitest/coverage-v8": "^4.1.12",
     "drizzle-kit": "^0.31.10",
     "eslint": "^10.9.1",
     "fast-check": "^4.9.0",
@@ -103,7 +103,7 @@
     "tsx": "^4.23.12",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "typescript-eslint": "^8.68.0",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.12"
   },
   "peerDependencies": {
     "electron": ">=30.0.0"

@@ -19,9 +19,94 @@ const dataTableSource = readFileSync(
 );
 const readJson = url => JSON.parse(readFileSync(url, 'utf8'));
 
+// Upstream deprecations with no owner-compatible replacement. Each exception is
+// bound to one package name and one major line, carries a reason and removal
+// criterion, and expires on the same 30-day cadence as the deprecation-floor
+// overrides in config/exact-overrides-policy.json, so it is re-reviewed rather
+// than forgotten. Any other deprecated lockfile entry still fails this gate.
+const UNREPLACEABLE_DEPRECATIONS = Object.freeze([
+  {
+    name: '@opentelemetry/sdk-trace-base',
+    major: 2,
+    reviewedOn: '2026-11-05',
+    reviewBy: '2026-12-05',
+    reason:
+      'Every 2.x release is deprecated in favour of @opentelemetry/sdk-trace 3.x, but ' +
+      '@sentry/node (through 10.78.0) depends on sdk-trace-base ^2.9.0 and ' +
+      '@sentry/opentelemetry peers on ^1.30.1 || ^2.1.0, so 3.x does not fit.',
+    removalCriteria: 'Remove once Sentry accepts @opentelemetry/sdk-trace 3.x.',
+  },
+]);
+
+/** Exact lockfile package keys (`name@version`) that carry a deprecated: field. */
+function deprecatedLockfilePackages(source) {
+  const deprecated = [];
+  let current;
+  for (const line of source.split(/\r?\n/u)) {
+    const key = line.match(/^ {2}(\S.*):$/u);
+    if (key) current = key[1].replace(/^'(.*)'$/u, '$1');
+    else if (/^\s+deprecated:/u.test(line)) deprecated.push(current);
+  }
+  return deprecated;
+}
+
+/** The exception covering an exact `name@version` key, matched on name and major only. */
+function deprecationException(key, exceptions = UNREPLACEABLE_DEPRECATIONS) {
+  const [, name, major] = key.match(/^((?:@[^/@\s]+\/)?[^@\s]+)@(\d+)\.\d+\.\d+$/u) ?? [];
+  return exceptions.find(entry => entry.name === name && entry.major === Number(major));
+}
+
+function unexpectedDeprecations(source, exceptions = UNREPLACEABLE_DEPRECATIONS) {
+  return deprecatedLockfilePackages(source).filter(key => !deprecationException(key, exceptions));
+}
+
+test('deprecation exceptions match one package major and nothing else', () => {
+  const fixture = [
+    'packages:',
+    "  '@opentelemetry/sdk-trace-base@2.10.0':",
+    '    resolution: {integrity: sha512-a}',
+    '    deprecated: Use @opentelemetry/sdk-trace package',
+    "  '@opentelemetry/sdk-trace-base@3.0.0':",
+    '    resolution: {integrity: sha512-b}',
+    '    deprecated: moved',
+    "  '@opentelemetry/sdk-trace-base-extra@2.10.0':",
+    '    resolution: {integrity: sha512-c}',
+    '    deprecated: moved',
+    '  left-pad@1.3.0:',
+    '    resolution: {integrity: sha512-d}',
+    '    deprecated: use String.prototype.padStart',
+    '  healthy@1.0.0:',
+    '    resolution: {integrity: sha512-e}',
+  ].join('\n');
+
+  assert.deepEqual(unexpectedDeprecations(fixture), [
+    '@opentelemetry/sdk-trace-base@3.0.0',
+    '@opentelemetry/sdk-trace-base-extra@2.10.0',
+    'left-pad@1.3.0',
+  ]);
+});
+
+test('every deprecation exception is documented, current, and still needed', () => {
+  const now = Date.now();
+  const deprecated = deprecatedLockfilePackages(lockfile);
+  for (const entry of UNREPLACEABLE_DEPRECATIONS) {
+    assert.ok(entry.reason.length >= 20, `${entry.name} needs a concrete reason`);
+    assert.ok(entry.removalCriteria.length >= 20, `${entry.name} needs removal criteria`);
+    const reviewedAt = Date.parse(`${entry.reviewedOn}T00:00:00.000Z`);
+    const reviewBy = Date.parse(`${entry.reviewBy}T23:59:59.999Z`);
+    assert.ok(reviewBy - reviewedAt <= 31 * 24 * 60 * 60 * 1000, `${entry.name} exceeds 30 days`);
+    assert.ok(now <= reviewBy, `${entry.name} deprecation exception expired on ${entry.reviewBy}`);
+    assert.ok(
+      deprecated.some(key => deprecationException(key, [entry])),
+      `${entry.name}@${entry.major}.x is no longer deprecated in the lockfile; remove its exception`
+    );
+  }
+});
+
 test('dependency policy replaces deprecations instead of suppressing warnings', () => {
   assert.doesNotMatch(workspaceManifest, /^allowedDeprecatedVersions:/m);
-  assert.doesNotMatch(lockfile, /^\s+deprecated:/m);
+  const unexpected = unexpectedDeprecations(lockfile);
+  assert.deepEqual(unexpected, [], `deprecated lockfile packages: ${unexpected.join(', ')}`);
   assert.match(workspaceManifest, /^\s+'app-builder-lib>plist': '3\.1\.1'$/m);
   // The version moves whenever upstream patches xmldom, so assert the
   // invariant instead of the literal: an exact pin must exist, and the

@@ -41,7 +41,7 @@ test('every exact registry override has a current bounded review', () => {
 
   // A literal on purpose: this is the tripwire for a pin added or dropped
   // without a matching policy entry, so it must NOT be derived.
-  assert.equal(result.exactOverrideCount, 43);
+  assert.equal(result.exactOverrideCount, 18);
   assert.equal(result.owner, 'platform-maintainers');
   assert.equal(result.nextReviewBy, earliestReviewBy);
 });
@@ -62,19 +62,19 @@ test('a newly added exact override fails until it has review metadata', () => {
 });
 
 test('changing a pin target requires a fresh bound review', () => {
-  const changedOverrides = new Map(overrides).set('postcss', '8.5.26');
+  const changedOverrides = new Map(overrides).set('tmp', '0.2.8');
   assert.throws(
     () => validateExactOverridePolicy({ overrides: changedOverrides, policy }),
-    /postcss changed from reviewed target 8\.5\.25 to 8\.5\.26/
+    /tmp changed from reviewed target 0\.2\.7 to 0\.2\.8/
   );
 });
 
 test('removed overrides cannot leave stale policy entries', () => {
   const changedOverrides = new Map(overrides);
-  changedOverrides.delete('postcss');
+  changedOverrides.delete('tmp');
   assert.throws(
     () => validateExactOverridePolicy({ overrides: changedOverrides, policy }),
-    /stale or non-registry selector postcss/
+    /stale or non-registry selector tmp/
   );
 });
 
