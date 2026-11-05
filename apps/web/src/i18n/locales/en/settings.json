@@ -899,16 +899,16 @@
     },
     "staffPin": {
       "title": "Manage staff PIN",
-      "description": "Set a 6-digit PIN for {{name}}. Cashier PINs can switch shared workstations; a PIN never replaces full sign-in for manager or admin access.",
-      "label": "New 6-digit PIN",
-      "placeholder": "6 digits",
-      "requirement": "Use exactly 6 numbers. The PIN is stored as a one-way Argon2id hash.",
+      "description": "Set a 4-digit PIN for {{name}}. Cashier PINs can switch shared workstations; a PIN never replaces full sign-in for manager or admin access.",
+      "label": "New 4-digit PIN",
+      "placeholder": "4 digits",
+      "requirement": "Use exactly 4 numbers. The PIN is stored as a one-way Argon2id hash.",
       "cancel": "Cancel",
       "save": "Save PIN",
       "saving": "Saving...",
       "clear": "Remove PIN",
       "clearConfirm": "Remove the staff PIN for {{name}}?",
-      "invalid": "Enter exactly 6 digits."
+      "invalid": "Enter exactly 4 digits."
     },
     "toast": {
       "created": "User created",

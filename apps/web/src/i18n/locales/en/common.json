@@ -101,6 +101,7 @@
     "committedRefreshWarning": "The change was saved, but this screen could not refresh. Reload if the new state is not visible."
   },
   "changePassword": "Change password",
+  "myPin": "My PIN",
   "switchCashier": "Switch cashier",
   "signOut": "Sign out",
   "user": "User",
@@ -145,7 +146,7 @@
       "requestedBy": "Requested by {{name}} · {{site}}",
       "expiresAt": "Expires {{time}}",
       "pinLabel": "Your staff PIN",
-      "pinPlaceholder": "6 digits",
+      "pinPlaceholder": "4 digits",
       "rejectionReasonLabel": "Rejection reason",
       "rejectionReasonPlaceholder": "Explain why this request cannot proceed",
       "approve": "Approve",

@@ -37,6 +37,12 @@ const ChangePasswordModal = lazy(() =>
   }))
 );
 
+const MyPinModal = lazy(() =>
+  import('@/features/auth/MyPinModal').then(module => ({
+    default: module.MyPinModal,
+  }))
+);
+
 const LossPreventionAlertCenter = lazy(() =>
   import('@/features/loss-prevention/LossPreventionAlertCenter').then(module => ({
     default: module.LossPreventionAlertCenter,
@@ -64,6 +70,7 @@ export function Header({ onOpenSidebar, onOpenFirstSaleGuide }: HeaderProps) {
   const [online, setOnline] = useState(isOnline());
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  const [isMyPinOpen, setIsMyPinOpen] = useState(false);
   const [isStaffSwitchOpen, setIsStaffSwitchOpen] = useState(false);
   const [languagePreference, setLanguagePreference] = useState<LanguagePreference>(() =>
     readLanguagePreference()
@@ -315,6 +322,18 @@ export function Header({ onOpenSidebar, onOpenFirstSaleGuide }: HeaderProps) {
                   <KeyRound className="h-4 w-4" />
                   {t('common:changePassword')}
                 </Button>
+                <Button
+                  variant="ghost"
+                  size="compact"
+                  onClick={() => {
+                    setShowUserMenu(false);
+                    setIsMyPinOpen(true);
+                  }}
+                  className="mt-2 w-full justify-start px-3"
+                >
+                  <KeyRound className="h-4 w-4" />
+                  {t('common:myPin')}
+                </Button>
                 {user && ['admin', 'manager', 'cashier'].includes(user.role) && (
                   <>
                     <Button
@@ -389,6 +408,19 @@ export function Header({ onOpenSidebar, onOpenFirstSaleGuide }: HeaderProps) {
             }
           >
             <ChangePasswordModal isOpen onClose={() => setIsChangePasswordOpen(false)} />
+          </Suspense>
+        </RouteErrorBoundary>
+      )}
+      {isMyPinOpen && (
+        <RouteErrorBoundary>
+          <Suspense
+            fallback={
+              <Modal isOpen title={t('common:myPin')} onClose={() => setIsMyPinOpen(false)}>
+                <p role="status">{t('common:loading.pageDescription')}</p>
+              </Modal>
+            }
+          >
+            <MyPinModal isOpen onClose={() => setIsMyPinOpen(false)} />
           </Suspense>
         </RouteErrorBoundary>
       )}

@@ -91,7 +91,7 @@ describe('ManagerApprovalQueue', () => {
     queryResult.error = null;
   });
 
-  it('requires a six-digit fresh PIN before approving a queued request', async () => {
+  it('requires a four-digit fresh PIN before approving a queued request', async () => {
     const user = userEvent.setup();
     render(<ManagerApprovalQueue />);
 
@@ -102,14 +102,14 @@ describe('ManagerApprovalQueue', () => {
 
     const confirm = screen.getByRole('button', { name: 'Confirm approval' });
     expect(confirm).toBeDisabled();
-    await user.type(screen.getByLabelText('Your staff PIN'), '123456');
+    await user.type(screen.getByLabelText('Your staff PIN'), '1234');
     expect(confirm).toBeEnabled();
     await user.click(confirm);
 
     expect(decisionMutation.mutate).toHaveBeenCalledWith({
       requestId: 'approval-1',
       approverId: 'manager-1',
-      pin: '123456',
+      pin: '1234',
       decision: 'approved',
     });
   });
@@ -129,7 +129,7 @@ describe('ManagerApprovalQueue', () => {
     render(<ManagerApprovalQueue />);
 
     await user.click(screen.getByRole('button', { name: 'Reject' }));
-    await user.type(screen.getByLabelText('Your staff PIN'), '654321');
+    await user.type(screen.getByLabelText('Your staff PIN'), '6543');
     const confirm = screen.getByRole('button', { name: 'Confirm rejection' });
     expect(confirm).toBeDisabled();
     await user.type(screen.getByLabelText('Rejection reason'), '  Verify the receipt first  ');
@@ -138,7 +138,7 @@ describe('ManagerApprovalQueue', () => {
     expect(decisionMutation.mutate).toHaveBeenCalledWith({
       requestId: 'approval-1',
       approverId: 'manager-1',
-      pin: '654321',
+      pin: '6543',
       decision: 'rejected',
       reason: 'Verify the receipt first',
     });
@@ -162,7 +162,7 @@ describe('ManagerApprovalQueue', () => {
     const user = userEvent.setup();
     const { rerender } = render(<ManagerApprovalQueue />);
     await user.click(screen.getByRole('button', { name: 'Approve' }));
-    await user.type(screen.getByLabelText('Your staff PIN'), '123456');
+    await user.type(screen.getByLabelText('Your staff PIN'), '1234');
 
     queryResult.data = {
       approver: { id: 'manager-1', hasPin: true },

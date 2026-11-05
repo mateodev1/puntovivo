@@ -6,6 +6,7 @@ import { useToast } from '@/components/feedback/ToastProvider';
 import { onErrorToast } from '@/lib/mutationHelpers';
 import { trpc } from '@/lib/trpc';
 import { useCriticalMutation } from '@/lib/useCriticalMutation';
+import { STAFF_PIN_LENGTH } from '@/features/auth/pinPolicy';
 
 interface InlineApprovalDecisionProps {
   action: ManagerApprovalAction;
@@ -60,7 +61,8 @@ export function InlineApprovalDecision({
   });
 
   const approve = () => {
-    if (!effectiveApproverId || pin.length !== 6 || decisionMutation.isPending) return;
+    if (!effectiveApproverId || pin.length !== STAFF_PIN_LENGTH || decisionMutation.isPending)
+      return;
     decisionMutation.mutate({
       requestId,
       approverId: effectiveApproverId,
@@ -136,10 +138,12 @@ export function InlineApprovalDecision({
               type="password"
               inputMode="numeric"
               autoComplete="off"
-              maxLength={6}
+              maxLength={STAFF_PIN_LENGTH}
               className="input mt-1 h-10 font-mono tracking-[0.3em]"
               value={pin}
-              onChange={event => setPin(event.target.value.replace(/\D/g, '').slice(0, 6))}
+              onChange={event =>
+                setPin(event.target.value.replace(/\D/g, '').slice(0, STAFF_PIN_LENGTH))
+              }
               placeholder={t('common:userMenu.approvals.pinPlaceholder')}
               disabled={decisionMutation.isPending}
             />
@@ -147,7 +151,9 @@ export function InlineApprovalDecision({
           <button
             type="button"
             className="btn-primary h-10 justify-center text-xs"
-            disabled={!effectiveApproverId || pin.length !== 6 || decisionMutation.isPending}
+            disabled={
+              !effectiveApproverId || pin.length !== STAFF_PIN_LENGTH || decisionMutation.isPending
+            }
             onClick={approve}
           >
             {decisionMutation.isPending

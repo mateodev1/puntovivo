@@ -5,7 +5,7 @@ import { render } from '@/test/utils';
 import { StaffPinModal } from './StaffPinModal';
 
 describe('StaffPinModal', () => {
-  it('normalizes numeric input and submits exactly six digits', async () => {
+  it('normalizes numeric input and submits exactly four digits', async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn(async () => undefined);
     render(
@@ -18,9 +18,9 @@ describe('StaffPinModal', () => {
       />
     );
 
-    await user.type(screen.getByLabelText('New 6-digit PIN'), '12a3456');
+    await user.type(screen.getByLabelText('New 4-digit PIN'), '12a3456');
     await user.click(screen.getByRole('button', { name: 'Save PIN' }));
-    expect(onSubmit).toHaveBeenCalledWith('123456');
+    expect(onSubmit).toHaveBeenCalledWith('1234');
   });
 
   it('requires confirmation before clearing an enrolled PIN', async () => {

@@ -101,6 +101,7 @@
     "committedRefreshWarning": "El cambio quedó guardado, pero esta pantalla no se pudo actualizar. Recarga si no ves el nuevo estado."
   },
   "changePassword": "Cambiar contraseña",
+  "myPin": "Mi PIN",
   "switchCashier": "Cambiar cajero",
   "signOut": "Cerrar sesión",
   "user": "Usuario",
@@ -145,7 +146,7 @@
       "requestedBy": "Solicitada por {{name}} · {{site}}",
       "expiresAt": "Vence {{time}}",
       "pinLabel": "Tu PIN de personal",
-      "pinPlaceholder": "6 dígitos",
+      "pinPlaceholder": "4 dígitos",
       "rejectionReasonLabel": "Motivo del rechazo",
       "rejectionReasonPlaceholder": "Explica por qué no se puede continuar con la solicitud",
       "approve": "Aprobar",

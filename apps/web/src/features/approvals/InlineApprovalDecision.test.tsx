@@ -68,14 +68,10 @@ describe('InlineApprovalDecision', () => {
     mutationOptions = undefined;
   });
 
-  it('submits only a configured manager with a fresh six-digit PIN', async () => {
+  it('submits only a configured manager with a fresh four-digit PIN', async () => {
     const user = userEvent.setup();
     render(
-      <InlineApprovalDecision
-        action="sale_discount"
-        requestId="approval-1"
-        onDecided={vi.fn()}
-      />
+      <InlineApprovalDecision action="sale_discount" requestId="approval-1" onDecided={vi.fn()} />
     );
 
     expect(screen.getByRole('option', { name: 'Marta Manager' })).toBeInTheDocument();
@@ -83,14 +79,14 @@ describe('InlineApprovalDecision', () => {
     const submit = screen.getByRole('button', { name: 'Approve checkout' });
     expect(submit).toBeDisabled();
 
-    await user.type(screen.getByLabelText('Their staff PIN'), '97a5310');
-    expect(screen.getByLabelText('Their staff PIN')).toHaveValue('975310');
+    await user.type(screen.getByLabelText('Their staff PIN'), '97a531');
+    expect(screen.getByLabelText('Their staff PIN')).toHaveValue('9753');
     await user.click(submit);
 
     expect(mutate).toHaveBeenCalledWith({
       requestId: 'approval-1',
       approverId: 'manager-1',
-      pin: '975310',
+      pin: '9753',
       decision: 'approved',
     });
   });
@@ -98,11 +94,7 @@ describe('InlineApprovalDecision', () => {
   it('refreshes request and eligible approvers after a successful decision', async () => {
     const onDecided = vi.fn();
     render(
-      <InlineApprovalDecision
-        action="sale_discount"
-        requestId="approval-1"
-        onDecided={onDecided}
-      />
+      <InlineApprovalDecision action="sale_discount" requestId="approval-1" onDecided={onDecided} />
     );
 
     await act(async () => {
