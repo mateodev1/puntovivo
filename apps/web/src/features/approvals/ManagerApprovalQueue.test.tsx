@@ -152,7 +152,7 @@ describe('ManagerApprovalQueue', () => {
     render(<ManagerApprovalQueue />);
 
     expect(
-      screen.getByText('Configure your staff PIN in Users before deciding requests.')
+      screen.getByText('Set your 4-digit PIN in "My PIN" before deciding requests.')
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Reject' })).toBeDisabled();

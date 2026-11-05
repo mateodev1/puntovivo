@@ -140,7 +140,7 @@
       "loading": "Checking requests…",
       "empty": "No pending requests.",
       "errorTitle": "Unable to update approvals",
-      "pinMissing": "Configure your staff PIN in Users before deciding requests.",
+      "pinMissing": "Set your 4-digit PIN in \"My PIN\" before deciding requests.",
       "freshPinHint": "Enter your own PIN for every decision. No elevated session is created.",
       "checkoutSummary": "Exact checkout request",
       "requestedBy": "Requested by {{name}} · {{site}}",

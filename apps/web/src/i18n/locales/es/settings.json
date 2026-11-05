@@ -899,7 +899,7 @@
     },
     "staffPin": {
       "title": "Gestionar PIN del personal",
-      "description": "Configura un PIN de 4 dígitos para {{name}}. Los PIN de cajero permiten cambiar el operador del puesto; un PIN nunca reemplaza el inicio de sesión completo de un gestor o administrador.",
+      "description": "Configura un PIN de 4 dígitos para {{name}}. El PIN permite cambiar el operador en puestos compartidos, aprobar solicitudes y también iniciar sesión con esta persona en la aplicación de escritorio. Administrar usuarios sigue requiriendo iniciar sesión con contraseña.",
       "label": "Nuevo PIN de 4 dígitos",
       "placeholder": "4 dígitos",
       "requirement": "Usa exactamente 4 números. El PIN se almacena como un hash Argon2id irreversible.",

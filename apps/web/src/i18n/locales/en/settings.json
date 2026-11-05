@@ -899,7 +899,7 @@
     },
     "staffPin": {
       "title": "Manage staff PIN",
-      "description": "Set a 4-digit PIN for {{name}}. Cashier PINs can switch shared workstations; a PIN never replaces full sign-in for manager or admin access.",
+      "description": "Set a 4-digit PIN for {{name}}. The PIN switches staff on shared workstations, approves requests and also signs this person in on the desktop app. Managing users still requires a password sign-in.",
       "label": "New 4-digit PIN",
       "placeholder": "4 digits",
       "requirement": "Use exactly 4 numbers. The PIN is stored as a one-way Argon2id hash.",
