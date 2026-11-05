@@ -96,6 +96,8 @@ export const SERVER_ERROR_CODES_A = {
   AUTH_PIN_LOGIN_UNAVAILABLE: 'AUTH_PIN_LOGIN_UNAVAILABLE',
   /** Five consecutive PIN failures locked the PIN; a password login or admin PIN reset clears it. */
   AUTH_PIN_LOCKED: 'AUTH_PIN_LOCKED',
+  /** A `staff_pin` session tried to administer users; that requires a password sign-in. */
+  AUTH_PASSWORD_SESSION_REQUIRED: 'AUTH_PASSWORD_SESSION_REQUIRED',
   /** The authenticated user/device generation changed while a command was in flight. */
   AUTH_IDENTITY_CHANGED: 'AUTH_IDENTITY_CHANGED',
 

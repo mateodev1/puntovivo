@@ -26,6 +26,7 @@ import type { ModuleId } from '../../services/modules/manifest.js';
 import { createModuleGuard } from './modules.js';
 import type { UserRole } from '@puntovivo/shared/roles';
 import { createRoleGuard } from './roles.js';
+import { passwordSessionRequired } from './passwordSession.js';
 import { tenantProcedure } from './tenant.js';
 
 /**
@@ -57,6 +58,16 @@ export const criticalCommandProcedure = tenantProcedure.use(commandEnvelope);
  */
 export const criticalCommandAdminProcedure = tenantProcedure
   .use(createRoleGuard(ADMIN_ONLY_ROLES, 'Only administrators can perform this action'))
+  .use(commandEnvelope);
+
+/**
+ * Admin-only critical command that also refuses `staff_pin` sessions (user
+ * administration). The session guard sits before the envelope for the same
+ * replay reason as the role guard.
+ */
+export const criticalCommandPasswordAdminProcedure = tenantProcedure
+  .use(createRoleGuard(ADMIN_ONLY_ROLES, 'Only administrators can perform this action'))
+  .use(passwordSessionRequired)
   .use(commandEnvelope);
 
 export const criticalCommandManagerOrAdminProcedure = tenantProcedure
