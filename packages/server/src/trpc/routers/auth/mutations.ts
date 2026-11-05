@@ -22,6 +22,7 @@ import {
   changePasswordInput,
   switchStaffInput,
   pinLoginInput,
+  setMyPinInput,
   validatePasswordStrength,
 } from '../../schemas/auth.js';
 import { throwServerError } from '../../../lib/errorCodes.js';
@@ -75,7 +76,8 @@ import {
   resetPinFailures,
   throwPinLocked,
 } from '../../../security/pinLockout.js';
-import { getDummyStaffPinHash, verifyStaffPin } from '../../../security/staffPins.js';
+import { getDummyStaffPinHash, hashStaffPin, verifyStaffPin } from '../../../security/staffPins.js';
+import { enqueueSync } from '../../../services/sync/enqueue.js';
 import { writeAuditLog } from '../../../services/audit-logs.js';
 import { parkDraftsForIdentityChange } from '../../../application/sales/parkDraftsForIdentityChange.js';
 import { assertLocalAuthCapability } from '../../../security/localAuthCapability.js';
@@ -665,6 +667,93 @@ export const authMutationProcedures = {
       setRefreshCookie(ctx.req, ctx.res, refreshToken);
 
       return { token };
+    }),
+
+  /**
+   * Self-service staff PIN set/clear, gated by the current password. A wrong
+   * password counts toward the same per-email login bucket as `auth.login`, so
+   * this cannot be used to brute-force the password. Like the admin
+   * `users.setStaffPin`, it does not bump `sessionVersion` and resets the PIN
+   * lockout counter.
+   */
+  setMyPin: protectedProcedure
+    .use(
+      rateLimitFor({
+        name: 'auth.setMyPin',
+        max: 20,
+        windowMs: 60 * 60_000,
+        keyBy: ['userId'],
+      })
+    )
+    .input(setMyPinInput)
+    .mutation(async ({ ctx, input }) => {
+      const actorId = ctx.user.id;
+      const tenantId = ctx.tenantId;
+      if (!tenantId) {
+        throwServerError({
+          trpcCode: 'UNAUTHORIZED',
+          errorCode: 'AUTH_INVALID_CREDENTIALS',
+          message: 'authenticated context required',
+        });
+      }
+      const user = await ctx.db
+        .select()
+        .from(users)
+        .where(and(eq(users.id, actorId), eq(users.tenantId, tenantId)))
+        .get();
+      if (!user || !user.isActive) {
+        throwServerError({
+          trpcCode: 'UNAUTHORIZED',
+          errorCode: 'AUTH_INVALID_CREDENTIALS',
+          message: 'authenticated context required',
+        });
+      }
+
+      const ip = ctx.req.ip;
+      checkLoginUsername(ctx.db, user.email);
+      const passwordOk = await verifyPasswordSecurely(user.passwordHash, input.currentPassword);
+      if (!passwordOk) {
+        registerLoginFailure(ctx.db, ip, user.email);
+        throwServerError({
+          trpcCode: 'UNAUTHORIZED',
+          errorCode: 'AUTH_INVALID_CREDENTIALS',
+          message: 'Current password is incorrect',
+        });
+      }
+
+      const wasConfigured = user.staffPinHash !== null;
+      const willBeConfigured = input.pin !== null;
+      const staffPinHash = input.pin === null ? null : await hashStaffPin(input.pin);
+      const now = new Date().toISOString();
+      ctx.db.transaction(tx => {
+        tx.update(users)
+          .set({ staffPinHash, pinFailedAttempts: 0, updatedAt: now })
+          .where(and(eq(users.id, actorId), eq(users.tenantId, tenantId)))
+          .run();
+        writeAuditLog({
+          tx,
+          tenantId: tenantId,
+          actorId,
+          action: 'user.pin.update',
+          resourceType: 'user',
+          resourceId: actorId,
+          before: { configured: wasConfigured },
+          after: { configured: willBeConfigured },
+          metadata: { targetRole: user.role, self: true },
+        });
+      });
+
+      await enqueueSync(
+        { ...ctx, tenantId },
+        {
+          entityType: 'users',
+          entityId: actorId,
+          operation: 'update',
+          data: { id: actorId, staffPinUpdated: true, updatedAt: now },
+        }
+      );
+
+      return { ok: true as const };
     }),
 
   /**

@@ -162,6 +162,12 @@
     "output": "inferred"
   },
   {
+    "path": "auth.setMyPin",
+    "kind": "mutation",
+    "input": "object{currentPassword:string[minLength=1],pin:string|null}",
+    "output": "inferred"
+  },
+  {
     "path": "auth.setupStatus",
     "kind": "query",
     "input": "void",
