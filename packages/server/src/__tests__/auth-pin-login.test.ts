@@ -4,12 +4,12 @@
  * same way the desktop launcher's in-process transport reaches the server.
  */
 import { hash } from 'argon2';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createServer, type PuntovivoServer } from '../index.js';
 import { getDatabase, type DatabaseInstance } from '../db/index.js';
-import { sites, tenants, users } from '../db/schema.js';
+import { auditLogs, sites, tenants, users } from '../db/schema.js';
 import { hashStaffPin } from '../security/staffPins.js';
 import { __resetForTests as resetLoginRateLimit } from '../security/loginRateLimit.js';
 import { LOCAL_AUTH_CAPABILITY_HEADER } from '../security/localAuthCapability.js';
@@ -73,6 +73,10 @@ async function createUser(opts: {
   return id;
 }
 
+function emailOf(userId: string): string {
+  return db.select({ email: users.email }).from(users).where(eq(users.id, userId)).get()!.email;
+}
+
 function attempts(userId: string): number {
   return db.select({ n: users.pinFailedAttempts }).from(users).where(eq(users.id, userId)).get()!.n;
 }
@@ -105,6 +109,33 @@ describe('auth.pinLogin / auth.pinLoginCandidates', () => {
     expect(payload.authMethod).toBe('staff_pin');
     expect(cookieValue(response.headers['set-cookie'], 'puntovivo_refresh')).toBeTruthy();
     expect(attempts(id)).toBe(0);
+  });
+
+  it('writes an auth.pin_login audit row on success, never on failure', async () => {
+    const id = await createUser({ pin: '1357' });
+    await call('pinLogin', { userId: id, pin: '0000' });
+    const auditFor = () =>
+      db
+        .select()
+        .from(auditLogs)
+        .where(and(eq(auditLogs.action, 'auth.pin_login'), eq(auditLogs.resourceId, id)))
+        .all();
+    expect(auditFor()).toHaveLength(0);
+
+    const { data } = await call('pinLogin', { userId: id, pin: '1357' });
+    const rows = auditFor();
+    expect(rows).toHaveLength(1);
+    const row = rows[0]!;
+    expect(row.actorId).toBe(id);
+    expect(row.tenantId).toBe(tenantId);
+    expect(row.resourceType).toBe('user');
+    const payload = await server.app.jwt.verify<{ authSessionExpiresAt: number }>(data.token);
+    const metadata = typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata;
+    expect(metadata).toEqual({
+      authMethod: 'staff_pin',
+      sessionExpiresAt: new Date(payload.authSessionExpiresAt).toISOString(),
+    });
+    expect(JSON.stringify(row)).not.toContain('1357');
   });
 
   it('is refused without the capability', async () => {
@@ -150,6 +181,48 @@ describe('auth.pinLogin / auth.pinLoginCandidates', () => {
     const locked = await call('pinLogin', { userId: id, pin: '2468' });
     expect(locked.errorCode).toBe('AUTH_PIN_LOCKED');
     expect(locked.data).toBeUndefined();
+  });
+
+  it('a password login immediately clears the PIN rate-limit bucket and the lockout', async () => {
+    const id = await createUser({ pin: '2468' });
+    for (let i = 0; i < PIN_LOCKOUT_THRESHOLD; i += 1) {
+      await call('pinLogin', { userId: id, pin: '0000' });
+    }
+    const login = await call('login', { email: emailOf(id), password: 'PinLoginPass123!' });
+    expect(login.data?.token).toBeTypeOf('string');
+    const pin = await call('pinLogin', { userId: id, pin: '2468' });
+    expect(pin.errorCode).toBeUndefined();
+    expect(pin.data?.user.id).toBe(id);
+  });
+
+  it('PIN failures do not consume the password-login IP bucket', async () => {
+    const first = await createUser({ pin: '2468' });
+    const second = await createUser({ pin: '2468' });
+    for (const userId of [first, second]) {
+      for (let i = 0; i < 5; i += 1) {
+        await call('pinLogin', { userId, pin: '0000' });
+      }
+    }
+    const passwordUser = await createUser({ pin: null });
+    const login = await call('login', {
+      email: emailOf(passwordUser),
+      password: 'PinLoginPass123!',
+    });
+    expect(login.errorCode).toBeUndefined();
+    expect(login.data?.token).toBeTypeOf('string');
+  });
+
+  it('PIN attempts are throttled per IP on their own bucket', async () => {
+    const ids = await Promise.all([1, 2, 3].map(() => createUser({ pin: '2468' })));
+    const codes: string[] = [];
+    for (const userId of ids) {
+      for (let i = 0; i < 4; i += 1) {
+        codes.push((await call('pinLogin', { userId, pin: '0000' })).errorCode);
+      }
+    }
+    // 10 failures fill the PIN IP bucket; the 11th and 12th are throttled.
+    expect(codes.slice(0, 10).every(c => c === 'AUTH_STAFF_PIN_INVALID')).toBe(true);
+    expect(codes.slice(10)).toEqual(['AUTH_RATE_LIMIT_EXCEEDED', 'AUTH_RATE_LIMIT_EXCEEDED']);
   });
 
   it('shares the lockout with auth.switchStaff', async () => {

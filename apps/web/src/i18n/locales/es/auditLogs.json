@@ -99,6 +99,7 @@
     "user.update": "Usuario actualizado",
     "user.pin.update": "PIN del personal actualizado",
     "auth.staff_switch": "Cajero cambiado",
+    "auth.pin_login": "Inicio de sesión con PIN",
     "employee_shift.clock_in": "Entrada de empleado registrada",
     "employee_shift.clock_out": "Salida de empleado registrada",
     "scheduled_shift.create": "Turno programado creado",

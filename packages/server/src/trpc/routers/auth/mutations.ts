@@ -117,6 +117,16 @@ async function requireIdentityChangeDevice(ctx: {
   return device.id;
 }
 
+/** Per-user PIN-login throttle bucket (stored in the `username` kind). */
+function pinLoginBucketKey(userId: string): string {
+  return `pin:${userId}`;
+}
+
+/** PIN-login IP bucket, kept apart from the password-login IP bucket. */
+function pinLoginIpKey(ip: string): string {
+  return `pin-ip:${ip}`;
+}
+
 type SessionUser = typeof users.$inferSelect;
 type SessionTenant = typeof tenants.$inferSelect;
 type SessionContext = Pick<Context, 'db' | 'req' | 'res'>;
@@ -432,8 +442,11 @@ export const authMutationProcedures = {
       });
     }
 
-    // clear the username bucket after every field cleared.
+    // clear the username bucket after every field cleared. A password
+    // sign-in also unlocks the PIN at once: reset the lockout counter AND the
+    // `pin:${id}` PIN-login throttle bucket.
     registerLoginSuccess(ctx.db, email);
+    registerLoginSuccess(ctx.db, pinLoginBucketKey(user.id));
     resetPinFailures(ctx.db, user.id);
 
     // lazy rehash: if the stored hash was produced with
@@ -490,8 +503,10 @@ export const authMutationProcedures = {
    */
   pinLogin: publicProcedure.input(pinLoginInput).mutation(async ({ ctx, input }) => {
     assertLocalAuthCapability(ctx);
-    const ip = ctx.req.ip;
-    const bucketKey = `pin:${input.userId}`;
+    // PIN attempts use their own IP bucket so wrong PINs can never block the
+    // password sign-in that unlocks them.
+    const ip = pinLoginIpKey(ctx.req.ip);
+    const bucketKey = pinLoginBucketKey(input.userId);
     checkLoginIp(ctx.db, ip);
     checkLoginUsername(ctx.db, bucketKey);
 
@@ -535,6 +550,20 @@ export const authMutationProcedures = {
       if (!consumePinSuccess(tx, user!.id)) {
         throwPinLocked();
       }
+      writeAuditLog({
+        tx,
+        tenantId: user!.tenantId,
+        actorId: user!.id,
+        action: 'auth.pin_login',
+        resourceType: 'user',
+        resourceId: user!.id,
+        before: null,
+        after: { userId: user!.id, role: user!.role },
+        metadata: {
+          authMethod: sessionClaims.authMethod,
+          sessionExpiresAt: new Date(sessionClaims.authSessionExpiresAt!).toISOString(),
+        },
+      });
     });
     registerLoginSuccess(ctx.db, bucketKey);
     return session;

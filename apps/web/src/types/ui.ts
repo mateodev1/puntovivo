@@ -98,6 +98,7 @@ export type AuditLogAction =
   | 'user.update'
   | 'user.pin.update'
   | 'auth.staff_switch'
+  | 'auth.pin_login'
   | 'employee_shift.clock_in'
   | 'employee_shift.clock_out'
   | 'employee_shift.correct'

@@ -60,6 +60,7 @@ const ACTION_OPTIONS: readonly AuditLogAction[] = [
   // staff credential lifecycle and shared-terminal identity handoff.
   'user.pin.update',
   'auth.staff_switch',
+  'auth.pin_login',
   // self-service attendance lifecycle.
   'employee_shift.clock_in',
   'employee_shift.clock_out',

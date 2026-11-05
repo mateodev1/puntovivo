@@ -295,10 +295,11 @@ export const auditLogActionEnum = [
   'purchase.void',
   'user.create',
   'user.update',
-  // PIN configuration and successful shared-terminal identity
-  // switches. Neither row carries the PIN or its hash.
+  // PIN configuration, successful shared-terminal identity switches and
+  // desktop PIN sign-ins. No row carries the PIN or its hash.
   'user.pin.update',
   'auth.staff_switch',
+  'auth.pin_login',
   // self-service attendance baseline. The actor is always the
   // employee whose shift is targeted; schedule edits remain in .
   'employee_shift.clock_in',
