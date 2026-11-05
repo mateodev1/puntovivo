@@ -639,7 +639,7 @@ describe('AuthProvider — interactive identity fences', () => {
           operation === 'login'
             ? result.current.login({ email: 'old@example.test', password: 'secret' })
             : operation === 'switchStaff'
-              ? result.current.switchStaff({ targetUserId: 'old', pin: '123456' })
+              ? result.current.switchStaff({ targetUserId: 'old', pin: '1234' })
               : result.current.logout();
       });
       await waitFor(() => expect(mutation).toHaveBeenCalledOnce());

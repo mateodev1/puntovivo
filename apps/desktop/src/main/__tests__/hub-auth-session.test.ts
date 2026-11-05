@@ -280,7 +280,7 @@ describe('Store Hub main-process auth custody', () => {
         operation === 'login'
           ? auth.login({ email: 'old@example.test', password: 'secret' })
           : operation === 'switchStaff'
-            ? auth.switchStaff({ targetUserId: 'old', pin: '123456' })
+            ? auth.switchStaff({ targetUserId: 'old', pin: '1234' })
             : auth.logout();
       const rejected = assert.rejects(pending, /active session changed/);
       await started.promise;
@@ -710,7 +710,12 @@ describe('Store Hub main-process auth custody', () => {
         return successResponse(
           {
             token: accessToken(1),
-            user: { id: 'user-1', email: 'admin@example.test', role: 'admin', tenantId: 'tenant-1' },
+            user: {
+              id: 'user-1',
+              email: 'admin@example.test',
+              role: 'admin',
+              tenantId: 'tenant-1',
+            },
           },
           { refresh: 'refresh-1', csrf: 'csrf-1' }
         );
