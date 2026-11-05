@@ -90,8 +90,10 @@ export const SERVER_ERROR_CODES_A = {
    * frontend can render a precise retry-after message.
    */
   AUTH_RATE_LIMIT_EXCEEDED: 'AUTH_RATE_LIMIT_EXCEEDED',
-  /** the six-digit staff PIN did not match. */
+  /** the four-digit staff PIN did not match. */
   AUTH_STAFF_PIN_INVALID: 'AUTH_STAFF_PIN_INVALID',
+  /** Five consecutive PIN failures locked the PIN; a password login or admin PIN reset clears it. */
+  AUTH_PIN_LOCKED: 'AUTH_PIN_LOCKED',
   /** The authenticated user/device generation changed while a command was in flight. */
   AUTH_IDENTITY_CHANGED: 'AUTH_IDENTITY_CHANGED',
 

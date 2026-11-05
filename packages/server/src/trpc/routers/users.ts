@@ -353,7 +353,7 @@ export const usersRouter = router({
       const now = new Date().toISOString();
       ctx.db.transaction(tx => {
         tx.update(users)
-          .set({ staffPinHash, updatedAt: now })
+          .set({ staffPinHash, pinFailedAttempts: 0, updatedAt: now })
           .where(and(eq(users.id, input.id), eq(users.tenantId, ctx.tenantId)))
           .run();
         writeAuditLog({

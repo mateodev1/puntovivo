@@ -20,6 +20,12 @@ import {
   registerStaffPinFailure,
   registerStaffPinSuccess,
 } from '../../security/loginRateLimit.js';
+import {
+  isPinLocked,
+  registerPinFailure,
+  resetPinFailures,
+  throwPinLocked,
+} from '../../security/pinLockout.js';
 import { getDummyStaffPinHash, verifyStaffPin } from '../../security/staffPins.js';
 import {
   canRoleApproveAction,
@@ -539,6 +545,7 @@ export const managerApprovalsRouter = router({
           name: users.name,
           role: users.role,
           staffPinHash: users.staffPinHash,
+          pinFailedAttempts: users.pinFailedAttempts,
         })
         .from(users)
         .where(
@@ -561,8 +568,12 @@ export const managerApprovalsRouter = router({
       const verificationHash =
         eligible && approver?.staffPinHash ? approver.staffPinHash : await getDummyStaffPinHash();
       const pinMatches = await verifyStaffPin(verificationHash, input.pin);
+      if (eligible && approver?.staffPinHash && isPinLocked(approver)) {
+        throwPinLocked();
+      }
       if (!eligible || !approver?.staffPinHash || !pinMatches) {
         registerStaffPinFailure(criticalCtx.db, rateIdentity);
+        if (eligible && approver?.staffPinHash) registerPinFailure(criticalCtx.db, approver.id);
         throwApprovalPinInvalid();
       }
 
@@ -691,6 +702,7 @@ export const managerApprovalsRouter = router({
       // A valid PIN clears only this approver's target bucket, and only
       // after the decision + audit transaction commits.
       registerStaffPinSuccess(criticalCtx.db, rateIdentity);
+      resetPinFailures(criticalCtx.db, approver.id);
 
       const updated = await criticalCtx.db
         .select()

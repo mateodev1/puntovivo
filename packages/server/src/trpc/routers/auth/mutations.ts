@@ -66,6 +66,12 @@ import {
 } from '../../../security/refreshTokenFamilies.js';
 import { rateLimitFor } from '../../middleware/procedureRateLimit.js';
 import { setRefreshCookie } from './helpers.js';
+import {
+  isPinLocked,
+  registerPinFailure,
+  resetPinFailures,
+  throwPinLocked,
+} from '../../../security/pinLockout.js';
 import { getDummyStaffPinHash, verifyStaffPin } from '../../../security/staffPins.js';
 import { writeAuditLog } from '../../../services/audit-logs.js';
 import { parkDraftsForIdentityChange } from '../../../application/sales/parkDraftsForIdentityChange.js';
@@ -135,8 +141,12 @@ export const authMutationProcedures = {
 
       const verificationHash = target?.staffPinHash ?? (await getDummyStaffPinHash());
       const pinMatches = await verifyStaffPin(verificationHash, input.pin);
+      if (target?.staffPinHash && target.id !== actor.id && isPinLocked(target)) {
+        throwPinLocked();
+      }
       if (!target?.staffPinHash || !pinMatches || target.id === actor.id) {
         registerStaffPinFailure(ctx.db, rateIdentity);
+        if (target?.staffPinHash && target.id !== actor.id) registerPinFailure(ctx.db, target.id);
         throwServerError({
           trpcCode: 'UNAUTHORIZED',
           errorCode: 'AUTH_STAFF_PIN_INVALID',
@@ -252,6 +262,7 @@ export const authMutationProcedures = {
       // Clear failures only after the refresh family and audit transaction
       // commits. A failed switch must not grant brute-force amnesty.
       registerStaffPinSuccess(ctx.db, rateIdentity);
+      resetPinFailures(ctx.db, target.id);
 
       const token = signAccessToken(ctx.req.server, handoff.target, sessionClaims);
       const refreshToken = signRefreshToken(
@@ -362,6 +373,7 @@ export const authMutationProcedures = {
 
     // clear the username bucket after every field cleared.
     registerLoginSuccess(ctx.db, email);
+    resetPinFailures(ctx.db, user.id);
 
     // lazy rehash: if the stored hash was produced with
     // weaker Argon2 params (or a legacy library default), upgrade it
