@@ -117,8 +117,15 @@ Cashiers and other staff can sign in with a 4-digit PIN instead of a password.
 - Attempts are also rate limited per target (5 per 15 minutes), so the app may
   report "rate limited" before it shows the lock message.
 - PIN sessions last at most 8 hours; after that the user signs in again.
-- PIN sessions cannot manage users (create, edit, reset passwords, set PINs);
-  those actions require a password sign-in (`AUTH_PASSWORD_SESSION_REQUIRED`).
+- PIN sessions cannot change trust or reveal secrets. These actions require a
+  password sign-in and are refused with `AUTH_PASSWORD_SESSION_REQUIRED`:
+  - User administration: create, edit, reset passwords, set PINs.
+  - Device authority: create a pairing code, revoke a device.
+  - Modules: activate or deactivate a module, apply a vertical preset.
+  - Webhooks: create, revoke, or retry a subscription or delivery.
+  - Pharmacy authorizations: create or revoke.
+  - Payment rail credentials: update.
+  - Desktop backup encryption key reveal (refused with `password_session_required`).
 - Each successful PIN sign-in is recorded in the audit log as `auth.pin_login`.
 - Upgrading clears all existing 6-digit PINs. Each must be set again as a
   4-digit PIN.
