@@ -87,11 +87,13 @@ overrides:
   'exceljs>unzipper': '0.12.5'
   # Replace deprecated transitives instead of suppressing their install
   # warnings. Drizzle Kit already embeds and invokes tsx; the legacy loader is
-  # an unused manifest dependency. The remaining aliases preserve the exact
-  # CommonJS call shapes consumed by their owners.
-  'drizzle-kit>@esbuild-kit/esm-loader': 'npm:tsx@4.21.0'
+  # an unused manifest dependency, aliased to the same tsx release the server
+  # workspace resolves so the graph carries a single patched esbuild line. The
+  # remaining aliases preserve the exact CommonJS call shapes consumed by their
+  # owners.
+  'drizzle-kit>@esbuild-kit/esm-loader': 'npm:tsx@4.23.12'
   boolean: 'file:packages/boolean-compat'
-  'archiver-utils>glob': '13.0.6'
+  'archiver-utils>glob': '14.0.3'
   lodash.isequal: 'npm:fast-deep-equal@3.1.3'
   '@electron/asar': '4.2.1'
   '@electron/packager': '20.0.4'
@@ -102,50 +104,23 @@ overrides:
   'app-builder-lib>plist': '3.1.1'
   'plist>@xmldom/xmldom': '0.9.12'
   filelist: '2.0.2'
-  'readdir-glob@1.1.3>minimatch': '10.2.5'
-  'minimatch@10.2.5>brace-expansion': '5.0.12'
-  'brace-expansion@5.0.9': '5.0.12'
-  postcss: '8.5.25'
+  'readdir-glob@1.1.3>minimatch': '11.0.4'
   tar: '7.5.21'
   tmp: '0.2.7'
-  '@electron/get@5.0.0>undici': '7.29.1'
-  'node-gyp@12.4.0>undici': '6.28.1'
-  'undici@6.28.0': '6.28.1'
-  'undici@7.29.0': '7.29.1'
-  'undici@8.10.0': '8.10.2'
-  'ip-address@10.5.0': '10.7.1'
   # Security floors for transitive toolchain/runtime dependencies. Keep the
-  # narrow parent or vulnerable-version selectors so unrelated dependency
-  # lines can continue following their owners' compatible ranges.
-  'jspdf>dompurify': '3.4.16'
-  'nanoid@3.3.16': '3.3.18'
-  'find-my-way@9.6.0': '9.7.0'
-  'esbuild@0.27.7': '0.28.1'
-  'esbuild@0.28.0': '0.28.1'
-  'js-yaml@4.3.0': '4.3.2'
-  'js-yaml@4.3.1': '4.3.2'
-  'fast-uri@3.1.2': '3.1.8'
-  'fast-uri@3.1.3': '3.1.8'
-  'fast-uri@3.1.4': '3.1.8'
-  'fast-uri@3.1.5': '3.1.8'
-  'fast-uri@3.1.6': '3.1.8'
-  'fast-uri@4.1.0': '4.1.5'
-  'fast-uri@4.1.1': '4.1.5'
-  'fast-uri@4.1.2': '4.1.5'
-  'fast-uri@4.1.3': '4.1.5'
-  'undici@7.28.0': '7.29.1'
-  # Deprecation floor. The AWS SDK clients declare @aws-sdk/core ^3.977.4, and
-  # 3.977.5 was deprecated upstream for a JSON Document number parsing bug
-  # (aws/aws-sdk-js-v3#8246). 3.977.6 is the published fix and stays inside the
-  # range its owners already accept.
-  '@aws-sdk/core@3.977.5': '3.977.6'
+  # vulnerable-version selectors narrow so unrelated dependency lines can keep
+  # following their owners' compatible ranges. glob <14.0.2 and minimatch
+  # <11.0.1 have no patched release inside the ranges @electron/asar,
+  # @sentry/bundler-plugins, readdir-glob and @eslint/config-array declare; the
+  # majors keep the glob.sync / Minimatch / minimatch call shapes they use.
+  'glob@13.0.6': '14.0.3'
+  'minimatch@10.2.6': '11.0.4'
 # Same-day releases stay exact and explicitly reviewed instead of relaxing the
-# age policy globally. Electron 43.4.1 passed the native ABI proof on 2026-08-19. xmldom
-# 0.9.12 is the published fix for the EntityReference serialization advisory
-# and supersedes 0.9.11, which upstream marked vulnerable; its bounded
-# deprecation-floor review expires 2026-10-04.
+# age policy globally. xmldom 0.9.12 is the published fix for the
+# EntityReference serialization advisory and supersedes 0.9.11, which upstream
+# marked vulnerable; its deprecation-floor review is bounded in
+# config/exact-overrides-policy.json.
 minimumReleaseAgeExclude:
-  - electron@43.4.1
   - '@xmldom/xmldom@0.9.12'
 
 patchedDependencies:
