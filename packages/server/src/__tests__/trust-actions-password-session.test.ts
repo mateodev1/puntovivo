@@ -97,6 +97,32 @@ const procedures: Array<[string, Call]> = [
     'paymentSettings.updateRail',
     c => c.paymentSettings.updateRail({ railId: 'wompi', credentials: { publicKey: 'pub_x' } }),
   ],
+  // Irreversible or bulk actions. Inputs are intentionally empty: the session
+  // guard runs before input validation, so a PIN session is refused first and a
+  // password session fails (if at all) on something other than the session.
+  ['dataRetention.runNow', c => c.dataRetention.runNow()],
+  ['dataRetention.update', c => c.dataRetention.update({} as never)],
+  ['launchMigration.importProducts', c => c.launchMigration.importProducts({} as never)],
+  ['launchMigration.importCustomers', c => c.launchMigration.importCustomers({} as never)],
+  ['launchMigration.importProviders', c => c.launchMigration.importProviders({} as never)],
+  [
+    'launchMigration.importCustomerBalances',
+    c => c.launchMigration.importCustomerBalances({} as never),
+  ],
+  ['launchMigration.importOpeningCash', c => c.launchMigration.importOpeningCash({} as never)],
+  [
+    'launchMigration.importFiscalProfiles',
+    c => c.launchMigration.importFiscalProfiles({} as never),
+  ],
+  ['sites.delete', c => c.sites.delete({ id: 'missing-site' } as never)],
+  [
+    'customers.disposePersonalData',
+    c => c.customers.disposePersonalData({ id: 'missing-customer' } as never),
+  ],
+  [
+    'customers.exportPersonalData',
+    c => c.customers.exportPersonalData({ id: 'missing-customer' } as never),
+  ],
 ];
 
 describe('trust and secret admin actions require a password session', () => {

@@ -317,13 +317,16 @@ function refreshIdentity(
     if (payload.userId !== previous.userId || payload.tenantId !== previous.tenantId) {
       throw new Error('Store Hub returned inconsistent refreshed access-token identity');
     }
+    // `staff_pin` is sticky: a refresh must never downgrade a PIN session.
     return {
       userId: payload.userId,
       tenantId: payload.tenantId,
       email: payload.email,
       role: payload.role,
       sessionVersion: payload.sessionVersion,
-      ...(payload.authMethod === 'staff_pin' ? { authMethod: 'staff_pin' } : {}),
+      ...(payload.authMethod === 'staff_pin' || previous.authMethod === 'staff_pin'
+        ? { authMethod: 'staff_pin' }
+        : {}),
     };
   } catch (error) {
     if (error instanceof Error && error.message.startsWith('Store Hub returned')) throw error;
@@ -728,7 +731,11 @@ export function createHubAuthSession(options: CreateHubAuthSessionOptions): HubA
     });
     requireGeneration(expected);
     const cookies = updateCookies(response.headers);
-    const identity = toIdentity(response.data.user, response.data.token);
+    // PIN-derived: mark explicitly, independent of the unverified JWT decode.
+    const identity = {
+      ...toIdentity(response.data.user, response.data.token),
+      authMethod: 'staff_pin',
+    };
     installGrant(response.data.token, identity, cookies);
     generation += 1;
     closeRealtimeConnections();
@@ -789,7 +796,11 @@ export function createHubAuthSession(options: CreateHubAuthSessionOptions): HubA
     // an otherwise valid session without realtime invalidations.
     closeRealtimeConnections();
     const cookies = updateCookies(response.headers, state);
-    const identity = toIdentity(response.data.user, response.data.token);
+    // Staff switch proves only a PIN: mark explicitly, independent of the decode.
+    const identity = {
+      ...toIdentity(response.data.user, response.data.token),
+      authMethod: 'staff_pin',
+    };
     installGrant(response.data.token, identity, cookies);
     generation += 1;
     return { token: response.data.token, sessionExpiresAt: response.data.sessionExpiresAt };

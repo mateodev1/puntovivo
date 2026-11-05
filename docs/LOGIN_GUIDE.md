@@ -125,6 +125,11 @@ Cashiers and other staff can sign in with a 4-digit PIN instead of a password.
   - Webhooks: create, revoke, or retry a subscription or delivery.
   - Pharmacy authorizations: create or revoke.
   - Payment rail credentials: update.
+  - Data retention: update the policy, run the sweep now.
+  - Launch migration: every commit import (products, customers, providers,
+    customer balances, opening cash, fiscal profiles); previews stay open.
+  - Sites: delete.
+  - Customer personal data: export, dispose.
   - Desktop backup encryption key reveal (refused with `password_session_required`).
 - Each successful PIN sign-in is recorded in the audit log as `auth.pin_login`.
 - Upgrading clears all existing 6-digit PINs. Each must be set again as a
