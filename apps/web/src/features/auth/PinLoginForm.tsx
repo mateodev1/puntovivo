@@ -6,7 +6,8 @@ import { pinLoginCandidatesLocal } from './localDesktopAuthTransport';
 import { STAFF_PIN_LENGTH, STAFF_PIN_PATTERN } from './pinPolicy';
 
 interface PinLoginFormProps {
-  onUsePassword: () => void;
+  /** `'no-candidates'` when nobody can sign in with a PIN here yet. */
+  onUsePassword: (reason?: 'no-candidates') => void;
 }
 
 type Candidate = { id: string; name: string };
@@ -39,7 +40,7 @@ export function PinLoginForm({ onUsePassword }: PinLoginFormProps) {
         const list = await pinLoginCandidatesLocal();
         if (cancelled) return;
         if (list.length === 0) {
-          onUsePasswordRef.current();
+          onUsePasswordRef.current('no-candidates');
           return;
         }
         setCandidates(list);
@@ -141,7 +142,7 @@ export function PinLoginForm({ onUsePassword }: PinLoginFormProps) {
           maxLength={STAFF_PIN_LENGTH}
           className="input mt-1 font-mono tracking-[0.35em]"
           value={pin}
-          disabled={isSubmitting}
+          disabled={isSubmitting || !userId}
           onChange={event => {
             const next = event.target.value.replace(/\D/g, '').slice(0, STAFF_PIN_LENGTH);
             setPin(next);
@@ -157,7 +158,11 @@ export function PinLoginForm({ onUsePassword }: PinLoginFormProps) {
         )}
       </div>
 
-      <button type="button" className="btn-ghost w-full justify-center" onClick={onUsePassword}>
+      <button
+        type="button"
+        className="btn-ghost w-full justify-center"
+        onClick={() => onUsePassword()}
+      >
         {t('auth:pinLogin.usePassword')}
       </button>
     </form>

@@ -42,6 +42,21 @@ describe('PinLoginForm', () => {
     );
   });
 
+  it('PIN input disabled until a user is chosen', async () => {
+    render(<PinLoginForm onUsePassword={vi.fn()} />);
+    await screen.findByLabelText('Ana Cashier');
+    expect(screen.getByLabelText(/pin/i)).toBeDisabled();
+  });
+
+  it('choosing a user enables and focuses the PIN input', async () => {
+    const user = userEvent.setup();
+    render(<PinLoginForm onUsePassword={vi.fn()} />);
+    await user.click(await screen.findByLabelText('Ana Cashier'));
+    const input = screen.getByLabelText(/pin/i);
+    expect(input).toBeEnabled();
+    await waitFor(() => expect(input).toHaveFocus());
+  });
+
   it('preselects a single candidate', async () => {
     mocks.candidates.mockResolvedValue([{ id: 'u1', name: 'Ana Cashier' }]);
     const user = userEvent.setup();
@@ -85,10 +100,12 @@ describe('PinLoginForm', () => {
     const onUsePassword = vi.fn();
     const { unmount } = render(<PinLoginForm onUsePassword={onUsePassword} />);
     await waitFor(() => expect(onUsePassword).toHaveBeenCalledOnce());
+    expect(onUsePassword).toHaveBeenCalledWith('no-candidates');
     unmount();
     mocks.candidates.mockRejectedValue(new Error('boom'));
     const second = vi.fn();
     render(<PinLoginForm onUsePassword={second} />);
     await waitFor(() => expect(second).toHaveBeenCalledOnce());
+    expect(second).toHaveBeenCalledWith();
   });
 });

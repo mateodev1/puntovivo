@@ -37,6 +37,7 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const pinAvailable = isPinLoginAvailable();
   const [mode, setMode] = useState<'pin' | 'password'>(pinAvailable ? 'pin' : 'password');
+  const [showPinSetupHint, setShowPinSetupHint] = useState(false);
   const {
     register,
     handleSubmit,
@@ -136,9 +137,17 @@ export function LoginPage() {
             </p>
 
             {mode === 'pin' ? (
-              <PinLoginForm onUsePassword={() => setMode('password')} />
+              <PinLoginForm
+                onUsePassword={reason => {
+                  setShowPinSetupHint(reason === 'no-candidates');
+                  setMode('password');
+                }}
+              />
             ) : (
               <form className="mt-8 space-y-5" onSubmit={handleSubmit(onSubmit)}>
+                {showPinSetupHint && (
+                  <p className="text-sm text-fg2">{t('pinLogin.noCandidatesHint')}</p>
+                )}
                 {errorMessage && (
                   <div className="rounded-[11px] border border-danger-500/20 bg-danger-50 px-4 py-3 text-sm text-danger-700">
                     {errorMessage}

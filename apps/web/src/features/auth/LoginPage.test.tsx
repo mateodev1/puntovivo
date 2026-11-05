@@ -118,6 +118,27 @@ describe('LoginPage PIN mode', () => {
     await waitFor(() => expect(document.querySelector('#password')).not.toBeNull());
   });
 
+  it.each([
+    ['en', /PINs now have 4 digits.*My PIN.*locked PIN/],
+    ['es', /PIN ahora tienen 4 dígitos.*Mi PIN.*PIN bloqueado/],
+  ] as const)(
+    'explains how to set up a PIN when there are no candidates (%s)',
+    async (locale, expected) => {
+      await i18n.changeLanguage(locale);
+      pinMock.candidates.mockResolvedValue([]);
+      render(<LoginPage />);
+      expect(await screen.findByText(expected)).toBeInTheDocument();
+    }
+  );
+
+  it('does not show the PIN setup hint after choosing password manually', async () => {
+    const user = userEvent.setup();
+    render(<LoginPage />);
+    await user.click(await screen.findByRole('button', { name: /use password/i }));
+    expect(document.querySelector('#password')).not.toBeNull();
+    expect(screen.queryByText(/PINs now have 4 digits/)).toBeNull();
+  });
+
   it('use password link switches mode', async () => {
     const user = userEvent.setup();
     render(<LoginPage />);
