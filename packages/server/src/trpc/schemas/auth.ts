@@ -57,6 +57,13 @@ export const switchStaffInput = z
   })
   .strict();
 
+export const pinLoginInput = z
+  .object({
+    userId: z.string().min(1, 'User is required'),
+    pin: staffPinSchema,
+  })
+  .strict();
+
 // ============================================================================
 // Output Schemas
 // ============================================================================

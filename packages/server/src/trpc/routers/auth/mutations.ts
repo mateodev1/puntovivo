@@ -9,7 +9,7 @@
  * @module trpc/routers/auth/mutations
  */
 import { z } from 'zod';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, isNotNull, lt, sql } from 'drizzle-orm';
 import { publicProcedure } from '../../init.js';
 import { protectedProcedure } from '../../middleware/auth.js';
 import { tenantProcedure } from '../../middleware/tenant.js';
@@ -21,6 +21,7 @@ import {
   loginInput,
   changePasswordInput,
   switchStaffInput,
+  pinLoginInput,
   validatePasswordStrength,
 } from '../../schemas/auth.js';
 import { throwServerError } from '../../../lib/errorCodes.js';
@@ -69,6 +70,7 @@ import { setRefreshCookie } from './helpers.js';
 import {
   consumePinSuccess,
   isPinLocked,
+  PIN_LOCKOUT_THRESHOLD,
   registerPinFailure,
   resetPinFailures,
   throwPinLocked,
@@ -76,6 +78,8 @@ import {
 import { getDummyStaffPinHash, verifyStaffPin } from '../../../security/staffPins.js';
 import { writeAuditLog } from '../../../services/audit-logs.js';
 import { parkDraftsForIdentityChange } from '../../../application/sales/parkDraftsForIdentityChange.js';
+import { assertLocalAuthCapability } from '../../../security/localAuthCapability.js';
+import type { Context } from '../../context.js';
 import { DEVICE_ID_HEADER } from '../../schemas/envelope.js';
 
 function readHeader(value: string | string[] | undefined): string | null {
@@ -109,6 +113,55 @@ async function requireIdentityChangeDevice(ctx: {
     });
   }
   return device.id;
+}
+
+type SessionUser = typeof users.$inferSelect;
+type SessionTenant = typeof tenants.$inferSelect;
+type SessionContext = Pick<Context, 'db' | 'req' | 'res'>;
+
+/**
+ * Shared tail of `auth.login` / `auth.pinLogin`: start a refresh family, sign
+ * both tokens, set the refresh cookie and build the response. When `gate` is
+ * given, it runs inside the same immediate transaction as the family creation,
+ * so a refusal (throw) rolls the whole session grant back.
+ */
+function issueSession(
+  ctx: SessionContext,
+  user: SessionUser,
+  tenant: SessionTenant,
+  sessionClaims?: ReturnType<typeof createStaffPinSessionClaims>,
+  gate?: (tx: typeof ctx.db) => void
+) {
+  pruneExpiredRefreshFamilies(ctx.db);
+  const family = gate
+    ? ctx.db.transaction(
+        tx => {
+          gate(tx as unknown as typeof ctx.db);
+          return createRefreshFamily(tx, { tenantId: user.tenantId, userId: user.id });
+        },
+        { behavior: 'immediate' }
+      )
+    : createRefreshFamily(ctx.db, { tenantId: user.tenantId, userId: user.id });
+
+  const token = signAccessToken(ctx.req.server, user, sessionClaims);
+  const refreshToken = signRefreshToken(ctx.req.server, user, family, sessionClaims);
+  setRefreshCookie(ctx.req, ctx.res, refreshToken);
+
+  return {
+    token,
+    user: {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      tenantId: user.tenantId,
+    },
+    tenant: {
+      id: tenant.id,
+      name: tenant.name,
+      slug: tenant.slug,
+    },
+  };
 }
 
 export const authMutationProcedures = {
@@ -401,31 +454,88 @@ export const authMutationProcedures = {
     // Auditoría 2026-07 — refresh rotation: each login starts a token
     // family so `auth.refresh` can detect replay of rotated tokens.
     // Login is also the low-frequency hook for pruning expired families.
-    pruneExpiredRefreshFamilies(ctx.db);
-    const family = createRefreshFamily(ctx.db, {
-      tenantId: user.tenantId,
-      userId: user.id,
+    return issueSession(ctx, user, tenant);
+  }),
+
+  /**
+   * Users offered on the desktop PIN login screen. Local-only: refused unless
+   * the request carries the per-boot desktop capability. Locked users are
+   * hidden so the picker never offers a PIN that would be refused.
+   */
+  pinLoginCandidates: publicProcedure.mutation(async ({ ctx }) => {
+    assertLocalAuthCapability(ctx);
+    return ctx.db
+      .select({ id: users.id, name: users.name })
+      .from(users)
+      .innerJoin(tenants, eq(tenants.id, users.tenantId))
+      .where(
+        and(
+          eq(users.isActive, true),
+          eq(tenants.isActive, true),
+          isNotNull(users.staffPinHash),
+          lt(users.pinFailedAttempts, PIN_LOCKOUT_THRESHOLD)
+        )
+      )
+      .orderBy(asc(users.name))
+      .all();
+  }),
+
+  /**
+   * Desktop-only 4-digit PIN login. Order mirrors `switchStaff`: capability,
+   * rate limits, Argon2 verify (dummy hash when there is nothing to verify
+   * against), lock/failure handling, then the success grant inside one
+   * immediate transaction guarded by `consumePinSuccess`.
+   */
+  pinLogin: publicProcedure.input(pinLoginInput).mutation(async ({ ctx, input }) => {
+    assertLocalAuthCapability(ctx);
+    const ip = ctx.req.ip;
+    const bucketKey = `pin:${input.userId}`;
+    checkLoginIp(ctx.db, ip);
+    checkLoginUsername(ctx.db, bucketKey);
+
+    const user = await ctx.db.select().from(users).where(eq(users.id, input.userId)).get();
+    const tenant = user
+      ? await ctx.db.select().from(tenants).where(eq(tenants.id, user.tenantId)).get()
+      : undefined;
+
+    const eligible = Boolean(user?.isActive && tenant?.isActive && user?.staffPinHash);
+    const verificationHash =
+      (eligible ? user!.staffPinHash : null) ?? (await getDummyStaffPinHash());
+    const pinMatches = await verifyStaffPin(verificationHash, input.pin);
+
+    if (eligible && isPinLocked(user!)) {
+      throwPinLocked();
+    }
+    if (!eligible || !pinMatches) {
+      registerLoginFailure(ctx.db, ip, bucketKey);
+      if (eligible) registerPinFailure(ctx.db, user!.id);
+      throwServerError({
+        trpcCode: 'UNAUTHORIZED',
+        errorCode: 'AUTH_STAFF_PIN_INVALID',
+        message: 'User or PIN is invalid',
+      });
+    }
+
+    const sessionClaims = createStaffPinSessionClaims();
+    const session = issueSession(ctx, user!, tenant!, sessionClaims, tx => {
+      // Re-read inside the transaction: the user may have been disabled or had
+      // the PIN changed while Argon2 was running.
+      const current = tx.select().from(users).where(eq(users.id, user!.id)).get();
+      if (!current?.isActive || current.staffPinHash !== user!.staffPinHash) {
+        throwServerError({
+          trpcCode: 'UNAUTHORIZED',
+          errorCode: 'AUTH_STAFF_PIN_INVALID',
+          message: 'User or PIN is invalid',
+        });
+      }
+      // Atomic lock gate: concurrent guesses may have locked the PIN while we
+      // awaited Argon2. Refusing here rolls the session grant back.
+      if (!consumePinSuccess(tx, user!.id)) {
+        throwPinLocked();
+      }
     });
-
-    const token = signAccessToken(ctx.req.server, user);
-    const refreshToken = signRefreshToken(ctx.req.server, user, family);
-    setRefreshCookie(ctx.req, ctx.res, refreshToken);
-
-    return {
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-        tenantId: user.tenantId,
-      },
-      tenant: {
-        id: tenant.id,
-        name: tenant.name,
-        slug: tenant.slug,
-      },
-    };
+    registerLoginSuccess(ctx.db, bucketKey);
+    return session;
   }),
 
   /**

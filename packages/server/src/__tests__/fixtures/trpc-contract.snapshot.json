@@ -138,6 +138,18 @@
     "output": "inferred"
   },
   {
+    "path": "auth.pinLogin",
+    "kind": "mutation",
+    "input": "object{pin:string,userId:string[minLength=1]}",
+    "output": "inferred"
+  },
+  {
+    "path": "auth.pinLoginCandidates",
+    "kind": "mutation",
+    "input": "void",
+    "output": "inferred"
+  },
+  {
     "path": "auth.refresh",
     "kind": "mutation",
     "input": "void",
