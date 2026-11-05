@@ -13,7 +13,7 @@
  * response time does not reveal lock state.
  */
 
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, lt, sql } from 'drizzle-orm';
 import type { DatabaseInstance } from '../db/index.js';
 import { users } from '../db/schema.js';
 import { throwServerError } from '../lib/errorCodes.js';
@@ -32,9 +32,25 @@ export function registerPinFailure(db: DatabaseInstance, userId: string): void {
     .run();
 }
 
-/** Clear the consecutive-failure counter (no-op write skipped when already 0). */
+/** Unconditionally clear the counter (password login, admin PIN reset). */
 export function resetPinFailures(db: DatabaseInstance, userId: string): void {
   db.update(users).set({ pinFailedAttempts: 0 }).where(eq(users.id, userId)).run();
+}
+
+/**
+ * Atomic success gate for a verified PIN. Clears the counter only while it is
+ * still below the threshold; returns false when the user is at/over it, i.e.
+ * the PIN got locked while this request was awaiting Argon2 and the caller
+ * must refuse with `AUTH_PIN_LOCKED`. Call it inside the same transaction that
+ * grants the session/decision so a refusal rolls everything back.
+ */
+export function consumePinSuccess(db: DatabaseInstance, userId: string): boolean {
+  const result = db
+    .update(users)
+    .set({ pinFailedAttempts: 0 })
+    .where(and(eq(users.id, userId), lt(users.pinFailedAttempts, PIN_LOCKOUT_THRESHOLD)))
+    .run();
+  return result.changes === 1;
 }
 
 export function throwPinLocked(): never {

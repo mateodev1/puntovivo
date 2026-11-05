@@ -6,7 +6,7 @@
 import { hash } from 'argon2';
 import { eq } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createServer, type PuntovivoServer } from '../index.js';
 import { getDatabase, type DatabaseInstance } from '../db/index.js';
 import { sites, users } from '../db/schema.js';
@@ -16,6 +16,21 @@ import { PIN_LOCKOUT_THRESHOLD } from '../security/pinLockout.js';
 import { registerDevice } from '../services/devices/devicesService.js';
 import { appRouter } from '../trpc/router.js';
 import { freshCriticalContext } from './utils/criticalCommandFixture.js';
+
+// Lets a test run code right after a real Argon2 verify resolves, i.e. at the
+// point where concurrent failures from other requests could have landed.
+const afterVerify = vi.hoisted(() => ({ hook: null as null | (() => void) }));
+vi.mock('../security/staffPins.js', async importOriginal => {
+  const actual = await importOriginal<typeof import('../security/staffPins.js')>();
+  return {
+    ...actual,
+    verifyStaffPin: async (hash: string, pin: string) => {
+      const result = await actual.verifyStaffPin(hash, pin);
+      afterVerify.hook?.();
+      return result;
+    },
+  };
+});
 
 const PASSWORD = 'LockoutPass123!';
 
@@ -245,5 +260,74 @@ describe('shared PIN lockout', () => {
         .createCaller(actor.ctx())
         .auth.switchStaff({ targetUserId: cashier.id, pin: '1357' })
     ).resolves.toMatchObject({ user: { id: cashier.id } });
+  });
+
+  it('refuses a correct PIN whose lock state went stale during the Argon2 await', async () => {
+    const actor = await createUser('admin', null);
+    const cashier = await createUser('cashier', '2468');
+    // The request snapshots 0 failures, then five concurrent wrong guesses land
+    // while its own verify is still in flight.
+    afterVerify.hook = () => {
+      afterVerify.hook = null;
+      db.update(users)
+        .set({ pinFailedAttempts: PIN_LOCKOUT_THRESHOLD })
+        .where(eq(users.id, cashier.id))
+        .run();
+    };
+    try {
+      await expectCode(
+        appRouter
+          .createCaller(actor.ctx())
+          .auth.switchStaff({ targetUserId: cashier.id, pin: '2468' }),
+        'AUTH_PIN_LOCKED'
+      );
+    } finally {
+      afterVerify.hook = null;
+    }
+    expect(attempts(cashier.id)).toBe(PIN_LOCKOUT_THRESHOLD);
+  });
+
+  it('same stale-snapshot guard applies to manager approvals', async () => {
+    const requester = await createUser('cashier', '2468');
+    const approver = await createUser('manager', '8642');
+    const request = await requestApproval(requester);
+    afterVerify.hook = () => {
+      afterVerify.hook = null;
+      db.update(users)
+        .set({ pinFailedAttempts: PIN_LOCKOUT_THRESHOLD })
+        .where(eq(users.id, approver.id))
+        .run();
+    };
+    try {
+      await expectCode(decide(requester, request.id, approver.id, '8642'), 'AUTH_PIN_LOCKED');
+    } finally {
+      afterVerify.hook = null;
+    }
+    expect(attempts(approver.id)).toBe(PIN_LOCKOUT_THRESHOLD);
+  });
+
+  it('parallel guesses never leave a locked account with a granted session', async () => {
+    const cashier = await createUser('cashier', '2468');
+    const actors = await Promise.all(
+      Array.from({ length: PIN_LOCKOUT_THRESHOLD + 1 }, () => createUser('admin', null))
+    );
+    const results = await Promise.all(
+      actors.map((a, i) =>
+        appRouter
+          .createCaller(a.ctx())
+          .auth.switchStaff({
+            targetUserId: cashier.id,
+            pin: i === PIN_LOCKOUT_THRESHOLD ? '2468' : '0000',
+          })
+          .then(
+            () => 'ok',
+            e => (e as { cause?: { errorCode?: string } }).cause?.errorCode ?? 'fail'
+          )
+      )
+    );
+    // Whatever the interleaving, a refusal for the right PIN must be a lock,
+    // and the counter is never above what the failures recorded.
+    expect(['ok', 'AUTH_PIN_LOCKED']).toContain(results[PIN_LOCKOUT_THRESHOLD]);
+    expect(attempts(cashier.id)).toBeLessThanOrEqual(PIN_LOCKOUT_THRESHOLD);
   });
 });

@@ -67,6 +67,7 @@ import {
 import { rateLimitFor } from '../../middleware/procedureRateLimit.js';
 import { setRefreshCookie } from './helpers.js';
 import {
+  consumePinSuccess,
   isPinLocked,
   registerPinFailure,
   resetPinFailures,
@@ -141,12 +142,13 @@ export const authMutationProcedures = {
 
       const verificationHash = target?.staffPinHash ?? (await getDummyStaffPinHash());
       const pinMatches = await verifyStaffPin(verificationHash, input.pin);
-      if (target?.staffPinHash && target.id !== actor.id && isPinLocked(target)) {
+      const lockable = Boolean(target?.staffPinHash) && target?.id !== actor.id;
+      if (lockable && isPinLocked(target!)) {
         throwPinLocked();
       }
       if (!target?.staffPinHash || !pinMatches || target.id === actor.id) {
         registerStaffPinFailure(ctx.db, rateIdentity);
-        if (target?.staffPinHash && target.id !== actor.id) registerPinFailure(ctx.db, target.id);
+        if (lockable) registerPinFailure(ctx.db, target!.id);
         throwServerError({
           trpcCode: 'UNAUTHORIZED',
           errorCode: 'AUTH_STAFF_PIN_INVALID',
@@ -207,6 +209,11 @@ export const authMutationProcedures = {
               message: 'The active user for this device changed before staff handoff completed',
             });
           }
+          // Atomic lock gate: a concurrent request may have locked the PIN
+          // while we awaited Argon2. Refusing here rolls the handoff back.
+          if (!consumePinSuccess(tx as unknown as typeof ctx.db, target.id)) {
+            throwPinLocked();
+          }
           parkDraftsForIdentityChange(tx as unknown as typeof ctx.db, {
             tenantId: ctx.tenantId,
             actorId: actor.id,
@@ -262,7 +269,6 @@ export const authMutationProcedures = {
       // Clear failures only after the refresh family and audit transaction
       // commits. A failed switch must not grant brute-force amnesty.
       registerStaffPinSuccess(ctx.db, rateIdentity);
-      resetPinFailures(ctx.db, target.id);
 
       const token = signAccessToken(ctx.req.server, handoff.target, sessionClaims);
       const refreshToken = signRefreshToken(
