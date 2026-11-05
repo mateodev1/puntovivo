@@ -12,7 +12,7 @@ import {
 } from './support/db';
 import { addProductToCartViaKeyboard } from './support/sales-keyboard';
 
-const MANAGER_PIN = '975310';
+const MANAGER_PIN = '9753';
 
 // These flows intentionally mutate the tenant-wide loss-prevention row and
 // restore it afterward. Keep the file serial so two policy bands cannot race

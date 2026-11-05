@@ -8,7 +8,7 @@ import {
   resetSession,
 } from './support/app';
 
-const E2E_STAFF_PIN = '246810';
+const E2E_STAFF_PIN = '2468';
 
 async function captureEvidence(page: Page, name: string) {
   const auditDir = process.env.PUNTOVIVO_AUDIT_DIR;

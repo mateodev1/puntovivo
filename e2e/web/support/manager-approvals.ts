@@ -6,7 +6,7 @@ import { hashStaffPin } from '../../../packages/server/src/security/staffPins.js
 const DB_PATH = join(process.cwd(), 'packages/server/data/local.db');
 const SQLITE_BUSY_TIMEOUT_MS = 5_000;
 
-export const E2E_MANAGER_APPROVAL_PIN = '975310';
+export const E2E_MANAGER_APPROVAL_PIN = '9753';
 
 export interface SeedManagerApprovalOptions {
   reason: string;
