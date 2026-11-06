@@ -10,7 +10,8 @@ const keyRevealLog = createModuleLogger('backup');
 // Closed error union (same posture as the restore drill): the
 // keychain / SQLCipher resolution path can throw diagnostics carrying
 // filesystem paths, so raw messages never cross to the renderer.
-export type BackupKeyRevealErrorCode = 'audit_unavailable' | 'key_unavailable' | 'password_session_required';
+export type BackupKeyRevealErrorCode =
+  'audit_unavailable' | 'key_unavailable' | 'password_session_required';
 
 export type BackupKeyRevealResult =
   { success: true; key: string } | { success: false; error: BackupKeyRevealErrorCode };
