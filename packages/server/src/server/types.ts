@@ -147,6 +147,8 @@ export interface PuntovivoServer {
   close: () => Promise<void>;
   /** Privileged launcher-only first-run capability. Never expose through HTTP or telemetry; standalone owns the private operator handoff. */
   getSetupToken: () => string | null;
+  /** Per-boot secret for the in-process desktop transport only. Never expose over HTTP, logs or telemetry. */
+  getLocalAuthCapability: () => string;
   /** Get the server URL */
   getUrl: () => string;
 }

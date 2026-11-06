@@ -3,7 +3,8 @@ import { and, eq, like, or, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { router } from '../init.js';
 import { adminProcedure } from '../middleware/roles.js';
-import { criticalCommandAdminProcedure } from '../middleware/criticalCommand.js';
+import { criticalCommandPasswordAdminProcedure } from '../middleware/criticalCommand.js';
+import { passwordSessionRequired } from '../middleware/passwordSession.js';
 import { users } from '../../db/schema.js';
 import { enqueueSync } from '../../services/sync/enqueue.js';
 import { clearRefreshCookie } from '../../security/authTokens.js';
@@ -19,6 +20,8 @@ import { hashPasswordSecurely } from '../../security/passwords.js';
 import { rateLimitFor } from '../middleware/procedureRateLimit.js';
 import { hashStaffPin } from '../../security/staffPins.js';
 
+// Every mutation here mints credentials or changes privileges, so it refuses
+// `staff_pin` sessions (AUTH_PASSWORD_SESSION_REQUIRED). `list` stays readable.
 export const usersRouter = router({
   list: adminProcedure.input(listUsersInput).query(async ({ ctx, input }) => {
     const { page, perPage, search, isActive } = input;
@@ -69,7 +72,7 @@ export const usersRouter = router({
     };
   }),
 
-  create: criticalCommandAdminProcedure
+  create: criticalCommandPasswordAdminProcedure
     .use(
       // cap admin user creation at 20/hour per actor so a
       // stolen admin token cannot enumerate or seed accounts quickly.
@@ -164,111 +167,115 @@ export const usersRouter = router({
         .get())!;
     }),
 
-  update: criticalCommandAdminProcedure.input(updateUserInput).mutation(async ({ ctx, input }) => {
-    const { id, ...updates } = input;
-    const existing = await ctx.db
-      .select()
-      .from(users)
-      .where(and(eq(users.id, id), eq(users.tenantId, ctx.tenantId)))
-      .get();
-
-    if (!existing) {
-      throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
-    }
-
-    if (updates.email && updates.email !== existing.email) {
-      const duplicate = await ctx.db
+  update: criticalCommandPasswordAdminProcedure
+    .input(updateUserInput)
+    .mutation(async ({ ctx, input }) => {
+      const { id, ...updates } = input;
+      const existing = await ctx.db
         .select()
         .from(users)
-        .where(eq(users.email, updates.email))
+        .where(and(eq(users.id, id), eq(users.tenantId, ctx.tenantId)))
         .get();
-      if (duplicate) {
+
+      if (!existing) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
+      }
+
+      if (updates.email && updates.email !== existing.email) {
+        const duplicate = await ctx.db
+          .select()
+          .from(users)
+          .where(eq(users.email, updates.email))
+          .get();
+        if (duplicate) {
+          throw new TRPCError({
+            code: 'CONFLICT',
+            message: 'A user with this email already exists',
+          });
+        }
+      }
+
+      if (existing.id === ctx.user!.id && updates.isActive === false) {
         throw new TRPCError({
-          code: 'CONFLICT',
-          message: 'A user with this email already exists',
+          code: 'BAD_REQUEST',
+          message: 'You cannot deactivate your own account',
         });
       }
-    }
 
-    if (existing.id === ctx.user!.id && updates.isActive === false) {
-      throw new TRPCError({
-        code: 'BAD_REQUEST',
-        message: 'You cannot deactivate your own account',
+      const now = new Date().toISOString();
+      const updateData: Record<string, unknown> = { updatedAt: now };
+      if (updates.email !== undefined) updateData.email = updates.email;
+      if (updates.name !== undefined) updateData.name = updates.name;
+      if (updates.role !== undefined) updateData.role = updates.role;
+      if (updates.isActive !== undefined) updateData.isActive = updates.isActive;
+      const actorId = ctx.user!.id;
+
+      // only audit genuinely sensitive changes. Name/email edits
+      // are bookkeeping; role escalation and disable/enable are security
+      // events. Detecting change against the `existing` snapshot keeps the
+      // audit timeline free of noise when an admin reopens the form and
+      // saves without touching role/isActive.
+      const roleChanged = updates.role !== undefined && updates.role !== existing.role;
+      const activeChanged =
+        updates.isActive !== undefined && updates.isActive !== existing.isActive;
+      const shouldAudit = roleChanged || activeChanged;
+
+      ctx.db.transaction(tx => {
+        tx.update(users).set(updateData).where(eq(users.id, id)).run();
+
+        if (shouldAudit) {
+          writeAuditLog({
+            tx,
+            tenantId: ctx.tenantId,
+            actorId,
+            action: 'user.update',
+            resourceType: 'user',
+            resourceId: id,
+            // Snapshot ONLY the fields that actually changed so auditors
+            // don't see spurious email/name noise next to a role escalation.
+            before: {
+              ...(roleChanged ? { role: existing.role } : {}),
+              ...(activeChanged ? { isActive: existing.isActive } : {}),
+            },
+            after: {
+              ...(roleChanged ? { role: updates.role } : {}),
+              ...(activeChanged ? { isActive: updates.isActive } : {}),
+            },
+            metadata: {
+              email: existing.email,
+              ...(roleChanged ? { roleChanged: true } : {}),
+              ...(activeChanged ? { activeChanged: true } : {}),
+            },
+          });
+        }
       });
-    }
 
-    const now = new Date().toISOString();
-    const updateData: Record<string, unknown> = { updatedAt: now };
-    if (updates.email !== undefined) updateData.email = updates.email;
-    if (updates.name !== undefined) updateData.name = updates.name;
-    if (updates.role !== undefined) updateData.role = updates.role;
-    if (updates.isActive !== undefined) updateData.isActive = updates.isActive;
-    const actorId = ctx.user!.id;
+      await enqueueSync(ctx, {
+        entityType: 'users',
+        entityId: id,
+        operation: 'update',
+        data: { id, ...updateData },
+      });
 
-    // only audit genuinely sensitive changes. Name/email edits
-    // are bookkeeping; role escalation and disable/enable are security
-    // events. Detecting change against the `existing` snapshot keeps the
-    // audit timeline free of noise when an admin reopens the form and
-    // saves without touching role/isActive.
-    const roleChanged = updates.role !== undefined && updates.role !== existing.role;
-    const activeChanged = updates.isActive !== undefined && updates.isActive !== existing.isActive;
-    const shouldAudit = roleChanged || activeChanged;
-
-    ctx.db.transaction(tx => {
-      tx.update(users).set(updateData).where(eq(users.id, id)).run();
-
-      if (shouldAudit) {
-        writeAuditLog({
-          tx,
-          tenantId: ctx.tenantId,
-          actorId,
-          action: 'user.update',
-          resourceType: 'user',
-          resourceId: id,
-          // Snapshot ONLY the fields that actually changed so auditors
-          // don't see spurious email/name noise next to a role escalation.
-          before: {
-            ...(roleChanged ? { role: existing.role } : {}),
-            ...(activeChanged ? { isActive: existing.isActive } : {}),
-          },
-          after: {
-            ...(roleChanged ? { role: updates.role } : {}),
-            ...(activeChanged ? { isActive: updates.isActive } : {}),
-          },
-          metadata: {
-            email: existing.email,
-            ...(roleChanged ? { roleChanged: true } : {}),
-            ...(activeChanged ? { activeChanged: true } : {}),
-          },
-        });
-      }
-    });
-
-    await enqueueSync(ctx, {
-      entityType: 'users',
-      entityId: id,
-      operation: 'update',
-      data: { id, ...updateData },
-    });
-
-    return (await ctx.db
-      .select({
-        id: users.id,
-        tenantId: users.tenantId,
-        email: users.email,
-        name: users.name,
-        role: users.role,
-        isActive: users.isActive,
-        createdAt: users.createdAt,
-        updatedAt: users.updatedAt,
-        hasPin: sql<boolean>`${users.staffPinHash} is not null`.mapWith(Boolean),
-      })
-      .from(users)
-      .where(eq(users.id, id))
-      .get())!;
-  }),
+      return (await ctx.db
+        .select({
+          id: users.id,
+          tenantId: users.tenantId,
+          email: users.email,
+          name: users.name,
+          role: users.role,
+          isActive: users.isActive,
+          createdAt: users.createdAt,
+          updatedAt: users.updatedAt,
+          hasPin: sql<boolean>`${users.staffPinHash} is not null`.mapWith(Boolean),
+        })
+        .from(users)
+        .where(eq(users.id, id))
+        .get())!;
+    }),
 
   resetPassword: adminProcedure
+    .use(passwordSessionRequired)
     .use(
       // cap admin password resets at 10/hour per actor. Same
       // rationale as `users.create`: throttles credential spraying via a
@@ -318,7 +325,7 @@ export const usersRouter = router({
       return { success: true, id: input.id };
     }),
 
-  setStaffPin: criticalCommandAdminProcedure
+  setStaffPin: criticalCommandPasswordAdminProcedure
     .use(
       rateLimitFor({
         name: 'users.setStaffPin',
@@ -353,7 +360,7 @@ export const usersRouter = router({
       const now = new Date().toISOString();
       ctx.db.transaction(tx => {
         tx.update(users)
-          .set({ staffPinHash, updatedAt: now })
+          .set({ staffPinHash, pinFailedAttempts: 0, updatedAt: now })
           .where(and(eq(users.id, input.id), eq(users.tenantId, ctx.tenantId)))
           .run();
         writeAuditLog({

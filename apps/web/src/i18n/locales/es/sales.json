@@ -683,7 +683,7 @@
       "help": "Mantén este cobro abierto. Un responsable elige su nombre e ingresa su propio PIN.",
       "loadError": "No se pudieron cargar las personas responsables.",
       "empty": "No hay una persona responsable disponible para esta aprobación.",
-      "pinMissing": "Las personas responsables necesitan un PIN de personal para aprobar aquí.",
+      "pinMissing": "Las personas responsables deben configurar un PIN de 4 dígitos en \"Mi PIN\" para aprobar aquí.",
       "approverLabel": "Persona responsable",
       "pinLabel": "Su PIN de personal",
       "submit": "Aprobar cobro",

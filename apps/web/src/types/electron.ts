@@ -131,7 +131,7 @@ export interface ElectronAPI {
   getBackupEncryptionKey?: () => Promise<{
     success: boolean;
     key?: string;
-    error?: 'audit_unavailable' | 'key_unavailable';
+    error?: 'audit_unavailable' | 'key_unavailable' | 'password_session_required';
   }>;
   /** admin-gated offline rotation of this install's SQLCipher key. */
   rotateDbEncryptionKey?: () => Promise<{
@@ -374,6 +374,8 @@ export interface SessionAPI {
   resume: () => Promise<{ token: string | null }>;
   clear: () => Promise<{ ok: true }>;
   loginLocal?: (input: { email: string; password: string }) => Promise<HubAuthIpcResult>;
+  pinLoginCandidatesLocal?: () => Promise<HubAuthIpcResult<Array<{ id: string; name: string }>>>;
+  pinLoginLocal?: (input: { userId: string; pin: string }) => Promise<HubAuthIpcResult>;
   refreshLocal?: () => Promise<HubAuthIpcResult>;
   switchStaffLocal?: (input: { targetUserId: string; pin: string }) => Promise<HubAuthIpcResult>;
   logoutLocal?: () => Promise<HubAuthIpcResult<{ ok: true }>>;

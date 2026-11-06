@@ -364,7 +364,9 @@ export function CompanyBackupCard({ focusRestore = false }: CompanyBackupCardPro
         // Closed code union from the main process — raw keychain or
         // audit diagnostics never cross the bridge.
         const description =
-          result.error === 'audit_unavailable' || result.error === 'key_unavailable'
+          result.error === 'audit_unavailable' ||
+          result.error === 'key_unavailable' ||
+          result.error === 'password_session_required'
             ? t(`company.backup.revealKey.${result.error}`)
             : t('errors:server.unknown');
         toast.error({

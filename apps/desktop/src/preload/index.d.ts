@@ -287,6 +287,11 @@ interface SessionAPI {
     email: string;
     password: string;
   }) => Promise<HubAuthIpcResult<HubAccessGrant>>;
+  pinLoginCandidatesLocal?: () => Promise<HubAuthIpcResult<Array<{ id: string; name: string }>>>;
+  pinLoginLocal?: (input: {
+    userId: string;
+    pin: string;
+  }) => Promise<HubAuthIpcResult<HubAccessGrant>>;
   refreshLocal: () => Promise<HubAuthIpcResult<HubAccessGrant>>;
   switchStaffLocal: (input: {
     targetUserId: string;

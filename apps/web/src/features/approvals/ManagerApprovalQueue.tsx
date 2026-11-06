@@ -7,6 +7,7 @@ import { trpc } from '@/lib/trpc';
 import { useCriticalMutation } from '@/lib/useCriticalMutation';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
 import { CHECKOUT_APPROVAL_RESOURCE_TYPE } from '@puntovivo/shared/checkout-approval';
+import { STAFF_PIN_LENGTH } from '@/features/auth/pinPolicy';
 
 type ApprovalDecision = 'approved' | 'rejected';
 
@@ -58,7 +59,7 @@ function ApprovalDecisionForm({
 
   const submitDecision = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (pin.length !== 6) return;
+    if (pin.length !== STAFF_PIN_LENGTH) return;
 
     if (decision === 'rejected') {
       const reason = rejectionReason.trim();
@@ -91,10 +92,12 @@ function ApprovalDecisionForm({
           type="password"
           inputMode="numeric"
           autoComplete="off"
-          maxLength={6}
+          maxLength={STAFF_PIN_LENGTH}
           className="input mt-1 h-9 font-mono tracking-[0.35em]"
           value={pin}
-          onChange={event => setPin(event.target.value.replace(/\D/g, '').slice(0, 6))}
+          onChange={event =>
+            setPin(event.target.value.replace(/\D/g, '').slice(0, STAFF_PIN_LENGTH))
+          }
           placeholder={t('common:userMenu.approvals.pinPlaceholder')}
           disabled={decisionMutation.isPending}
           autoFocus
@@ -125,7 +128,7 @@ function ApprovalDecisionForm({
           }
           disabled={
             decisionMutation.isPending ||
-            pin.length !== 6 ||
+            pin.length !== STAFF_PIN_LENGTH ||
             (decision === 'rejected' && !rejectionReason.trim())
           }
         >

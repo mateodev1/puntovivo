@@ -26,6 +26,8 @@ import {
   type HubRealtimeInput,
   type HubSwitchStaffInput,
 } from '../session/hub-auth-session.js';
+import type { TrustedSenderEvent } from '../session/trusted-sender.js';
+import { createLocalPinIpcHandlers } from './local-pin-ipc.js';
 
 // vector 1 — session lifecycle. `session:register` is called
 // by the renderer's AuthProvider after a successful login (or after a
@@ -38,8 +40,14 @@ export function registerSessionIpc(
   options: {
     hubAuthSession?: HubAuthSession;
     localAuthSession?: HubAuthSession;
+    /** Main-window top-frame check for PIN IPC; absent means PIN IPC is refused. */
+    isTrustedSender?: (event: TrustedSenderEvent) => boolean;
   } = {}
 ): void {
+  const localPin = createLocalPinIpcHandlers({
+    getLocalAuthSession: () => options.localAuthSession,
+    isTrustedSender: options.isTrustedSender ?? (() => false),
+  });
   const realtimeHandles = new Map<
     string,
     { handle: HubRealtimeHandle; removeDestroyedListener: () => void }
@@ -107,6 +115,15 @@ export function registerSessionIpc(
       if (!options.localAuthSession) throw new Error('Local desktop authentication is unavailable');
       return options.localAuthSession.login(input);
     })
+  );
+  // The preload asks synchronously at load time whether PIN login exists, so
+  // it can omit the functions for Hub clients (no local session).
+  ipcMain.on('session:local-pin-supported', event => {
+    event.returnValue = Boolean(options.localAuthSession);
+  });
+  ipcMain.handle('session:local-pin-candidates', event => localPin.candidates(event));
+  ipcMain.handle('session:local-pin-login', (event, input: unknown) =>
+    localPin.login(event, input)
   );
   ipcMain.handle('session:local-refresh', () =>
     captureHubAuthIpc(async () => {

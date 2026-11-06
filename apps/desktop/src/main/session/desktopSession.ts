@@ -31,6 +31,8 @@ export interface DesktopSessionIdentity {
   email: string;
   role: string;
   sessionVersion: number;
+  /** `staff_pin` for PIN login / staff switch; absent or `password` otherwise. */
+  authMethod?: string;
 }
 
 export type AccessTokenVerifier = (token: string) => Promise<DesktopSessionIdentity | null>;
@@ -57,6 +59,7 @@ interface DesktopSessionState {
   email: string;
   role: string;
   sessionVersion: number;
+  authMethod?: string;
   registeredAt: number;
 }
 
@@ -102,6 +105,7 @@ export async function register(accessToken: string, verify: AccessTokenVerifier)
     email: payload.email,
     role: payload.role,
     sessionVersion: payload.sessionVersion,
+    ...(payload.authMethod ? { authMethod: payload.authMethod } : {}),
     registeredAt: Date.now(),
   };
   currentAccessToken = accessToken;
@@ -152,7 +156,8 @@ export async function resume(verify: AccessTokenVerifier): Promise<string | null
     payload.userId !== snapshot.userId ||
     payload.tenantId !== snapshot.tenantId ||
     payload.role !== snapshot.role ||
-    payload.sessionVersion !== snapshot.sessionVersion
+    payload.sessionVersion !== snapshot.sessionVersion ||
+    payload.authMethod !== snapshot.authMethod
   ) {
     clear();
     return null;
@@ -188,6 +193,15 @@ export function requireUserId(): string {
 export function requireRole(): string {
   if (!current) throw new Error(SESSION_NOT_REGISTERED);
   return current.role;
+}
+
+/**
+ * True when the registered session was opened with a 4-digit PIN (PIN login or
+ * staff switch). Such a session may run the till but must not reveal secrets.
+ */
+export function isPinSession(): boolean {
+  if (!current) throw new Error(SESSION_NOT_REGISTERED);
+  return current.authMethod === 'staff_pin';
 }
 
 export function requireOneOfRoles(allowedRoles: readonly string[]): string {

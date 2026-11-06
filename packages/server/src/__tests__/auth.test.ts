@@ -207,7 +207,7 @@ describe('Auth tRPC Router', () => {
       tenantId: testTenantId,
       email: 'switch.cashier@example.com',
       passwordHash,
-      staffPinHash: await hashStaffPin('246810'),
+      staffPinHash: await hashStaffPin('2468'),
       name: 'Switch Cashier',
       role: 'cashier',
       isActive: true,
@@ -466,7 +466,7 @@ describe('Auth tRPC Router', () => {
         tenantId: foreignTenantId,
         email: `foreign-cashier-${foreignCashierId}@example.com`,
         passwordHash: await hash('ForeignCashier123!'),
-        staffPinHash: await hashStaffPin('135790'),
+        staffPinHash: await hashStaffPin('1357'),
         name: 'Foreign Cashier',
         role: 'cashier',
         isActive: true,
@@ -478,7 +478,7 @@ describe('Auth tRPC Router', () => {
         expect.objectContaining({ id: foreignCashierId })
       );
       await expect(
-        adminCaller().auth.switchStaff({ targetUserId: foreignCashierId, pin: '135790' })
+        adminCaller().auth.switchStaff({ targetUserId: foreignCashierId, pin: '1357' })
       ).rejects.toSatisfy((err: unknown) => {
         const cause = (err as TRPCError).cause;
         return (
@@ -493,7 +493,7 @@ describe('Auth tRPC Router', () => {
     it('switches to a cashier, fixes the PIN session ceiling, and audits both identities', async () => {
       const result = await adminCaller().auth.switchStaff({
         targetUserId: testCashierId,
-        pin: '246810',
+        pin: '2468',
       });
       const payload = await server.app.jwt.verify<AuthTokenPayload>(result.token);
       expect(payload).toMatchObject({
@@ -514,7 +514,7 @@ describe('Auth tRPC Router', () => {
       expect(audit?.actorId).toBe(testUserId);
       expect(audit?.before).toEqual({ userId: testUserId, role: 'admin' });
       expect(audit?.after).toEqual({ userId: testCashierId, role: 'cashier' });
-      expect(JSON.stringify(audit)).not.toContain('246810');
+      expect(JSON.stringify(audit)).not.toContain('2468');
     });
 
     it('requires a registered terminal before switching staff', async () => {
@@ -531,7 +531,7 @@ describe('Auth tRPC Router', () => {
       );
 
       await expect(
-        caller.auth.switchStaff({ targetUserId: testCashierId, pin: '246810' })
+        caller.auth.switchStaff({ targetUserId: testCashierId, pin: '2468' })
       ).rejects.toSatisfy((err: unknown) => {
         const cause = (err as TRPCError).cause;
         return (
@@ -545,8 +545,8 @@ describe('Auth tRPC Router', () => {
 
     it('keeps wrong PIN and unavailable target errors indistinguishable', async () => {
       for (const input of [
-        { targetUserId: testCashierId, pin: '111111' },
-        { targetUserId: 'foreign-or-missing-user', pin: '111111' },
+        { targetUserId: testCashierId, pin: '1111' },
+        { targetUserId: 'foreign-or-missing-user', pin: '1111' },
       ]) {
         await expect(adminCaller().auth.switchStaff(input)).rejects.toSatisfy((err: unknown) => {
           const cause = (err as TRPCError).cause;
@@ -563,11 +563,11 @@ describe('Auth tRPC Router', () => {
     it('never allows a staff PIN to switch into manager or admin privilege', async () => {
       await getDatabase()
         .update(users)
-        .set({ staffPinHash: await hashStaffPin('123456') })
+        .set({ staffPinHash: await hashStaffPin('1234') })
         .where(eq(users.id, testUserId));
 
       await expect(
-        adminCaller().auth.switchStaff({ targetUserId: testUserId, pin: '123456' })
+        adminCaller().auth.switchStaff({ targetUserId: testUserId, pin: '1234' })
       ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
     });
 

@@ -39,6 +39,16 @@ export interface HubSwitchStaffInput {
   pin: string;
 }
 
+export interface HubPinLoginInput {
+  userId: string;
+  pin: string;
+}
+
+export interface HubPinLoginCandidate {
+  id: string;
+  name: string;
+}
+
 export interface HubAccessGrant {
   token: string;
   sessionExpiresAt?: string;
@@ -132,10 +142,17 @@ export interface CreateHubAuthSessionOptions {
   allowInsecureLoopback?: boolean;
   platform?: NodeJS.Platform;
   fetchImpl?: typeof fetch;
+  /**
+   * Enables PIN login. Only the local (embedded-server) session sets this; a
+   * remote Hub must never receive PIN-login calls.
+   */
+  allowPinLogin?: boolean;
 }
 
 export interface HubAuthSession {
   login(input: HubLoginInput): Promise<HubAccessGrant>;
+  pinLoginCandidates(): Promise<HubPinLoginCandidate[]>;
+  pinLogin(input: HubPinLoginInput): Promise<HubAccessGrant>;
   refresh(): Promise<HubAccessGrant>;
   switchStaff(input: HubSwitchStaffInput): Promise<HubAccessGrant>;
   logout(): Promise<void>;
@@ -229,6 +246,7 @@ function toIdentity(user: HubAuthUser, accessToken: string): DesktopSessionIdent
         email?: unknown;
         role?: unknown;
         sessionVersion?: unknown;
+        authMethod?: unknown;
       };
       if (
         typeof payload.userId === 'string' &&
@@ -244,6 +262,7 @@ function toIdentity(user: HubAuthUser, accessToken: string): DesktopSessionIdent
           email: payload.email,
           role: payload.role,
           sessionVersion: payload.sessionVersion,
+          ...(payload.authMethod === 'staff_pin' ? { authMethod: 'staff_pin' } : {}),
         };
       }
     }
@@ -266,6 +285,7 @@ function toIdentity(user: HubAuthUser, accessToken: string): DesktopSessionIdent
     email: user.email,
     role: user.role,
     sessionVersion: tokenIdentity?.sessionVersion ?? 0,
+    ...(tokenIdentity?.authMethod ? { authMethod: tokenIdentity.authMethod } : {}),
   };
 }
 
@@ -282,6 +302,7 @@ function refreshIdentity(
       email?: unknown;
       role?: unknown;
       sessionVersion?: unknown;
+      authMethod?: unknown;
     };
     if (
       typeof payload.userId !== 'string' ||
@@ -296,12 +317,16 @@ function refreshIdentity(
     if (payload.userId !== previous.userId || payload.tenantId !== previous.tenantId) {
       throw new Error('Store Hub returned inconsistent refreshed access-token identity');
     }
+    // `staff_pin` is sticky: a refresh must never downgrade a PIN session.
     return {
       userId: payload.userId,
       tenantId: payload.tenantId,
       email: payload.email,
       role: payload.role,
       sessionVersion: payload.sessionVersion,
+      ...(payload.authMethod === 'staff_pin' || previous.authMethod === 'staff_pin'
+        ? { authMethod: 'staff_pin' }
+        : {}),
     };
   } catch (error) {
     if (error instanceof Error && error.message.startsWith('Store Hub returned')) throw error;
@@ -681,6 +706,42 @@ export function createHubAuthSession(options: CreateHubAuthSessionOptions): HubA
     return { token: response.data.token };
   }
 
+  function assertPinLoginAllowed(): void {
+    if (!options.allowPinLogin) {
+      throw new HubAuthRemoteError({
+        message: 'PIN login is unavailable',
+        errorCode: 'AUTH_PIN_LOGIN_UNAVAILABLE',
+        status: 403,
+      });
+    }
+  }
+
+  async function pinLoginCandidates(): Promise<HubPinLoginCandidate[]> {
+    assertPinLoginAllowed();
+    const response = await call<HubPinLoginCandidate[]>('auth.pinLoginCandidates', undefined);
+    return response.data.map(candidate => ({ id: candidate.id, name: candidate.name }));
+  }
+
+  async function pinLogin(input: HubPinLoginInput): Promise<HubAccessGrant> {
+    assertPinLoginAllowed();
+    const expected = generation;
+    const response = await call<{ token: string; user: HubAuthUser }>('auth.pinLogin', {
+      userId: input.userId,
+      pin: input.pin,
+    });
+    requireGeneration(expected);
+    const cookies = updateCookies(response.headers);
+    // PIN-derived: mark explicitly, independent of the unverified JWT decode.
+    const identity = {
+      ...toIdentity(response.data.user, response.data.token),
+      authMethod: 'staff_pin',
+    };
+    installGrant(response.data.token, identity, cookies);
+    generation += 1;
+    closeRealtimeConnections();
+    return { token: response.data.token };
+  }
+
   async function refresh(): Promise<HubAccessGrant> {
     if (refreshInFlight?.generation === generation) return refreshInFlight.promise;
     const expected = generation;
@@ -735,7 +796,11 @@ export function createHubAuthSession(options: CreateHubAuthSessionOptions): HubA
     // an otherwise valid session without realtime invalidations.
     closeRealtimeConnections();
     const cookies = updateCookies(response.headers, state);
-    const identity = toIdentity(response.data.user, response.data.token);
+    // Staff switch proves only a PIN: mark explicitly, independent of the decode.
+    const identity = {
+      ...toIdentity(response.data.user, response.data.token),
+      authMethod: 'staff_pin',
+    };
     installGrant(response.data.token, identity, cookies);
     generation += 1;
     return { token: response.data.token, sessionExpiresAt: response.data.sessionExpiresAt };
@@ -777,5 +842,16 @@ export function createHubAuthSession(options: CreateHubAuthSessionOptions): HubA
   const verifyAccessToken: AccessTokenVerifier = async token =>
     token === currentAccessToken && currentIdentity ? { ...currentIdentity } : null;
 
-  return { login, refresh, switchStaff, logout, request, openRealtime, clear, verifyAccessToken };
+  return {
+    login,
+    pinLoginCandidates,
+    pinLogin,
+    refresh,
+    switchStaff,
+    logout,
+    request,
+    openRealtime,
+    clear,
+    verifyAccessToken,
+  };
 }

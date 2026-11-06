@@ -4,13 +4,12 @@ import { Modal, ModalButton } from '@/components/form-controls/Modal';
 import { trpc } from '@/lib/trpc';
 import { translateServerError } from '@/lib/translateServerError';
 import { useAuth } from './AuthProvider';
+import { STAFF_PIN_LENGTH, STAFF_PIN_PATTERN } from './pinPolicy';
 
 interface StaffSwitchModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
-
-const STAFF_PIN_PATTERN = /^\d{6}$/;
 
 export function StaffSwitchModal({ isOpen, onClose }: StaffSwitchModalProps) {
   const { t } = useTranslation(['auth', 'errors']);
@@ -126,11 +125,11 @@ export function StaffSwitchModal({ isOpen, onClose }: StaffSwitchModalProps) {
             type="password"
             inputMode="numeric"
             autoComplete="off"
-            maxLength={6}
+            maxLength={STAFF_PIN_LENGTH}
             className="input mt-1 font-mono tracking-[0.35em]"
             value={pin}
             onChange={event => {
-              setPin(event.target.value.replace(/\D/g, '').slice(0, 6));
+              setPin(event.target.value.replace(/\D/g, '').slice(0, STAFF_PIN_LENGTH));
               setError(null);
             }}
             placeholder={t('auth:staffSwitch.pinPlaceholder')}

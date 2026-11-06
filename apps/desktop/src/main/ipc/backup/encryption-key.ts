@@ -2,6 +2,7 @@
 
 import { createModuleLogger } from '@puntovivo/server';
 import type { BackupIpcDeps } from './contracts.ts';
+import * as desktopSession from '../../session/desktopSession.ts';
 import { requireAdminTenantActor } from './guards.ts';
 
 const keyRevealLog = createModuleLogger('backup');
@@ -9,7 +10,8 @@ const keyRevealLog = createModuleLogger('backup');
 // Closed error union (same posture as the restore drill): the
 // keychain / SQLCipher resolution path can throw diagnostics carrying
 // filesystem paths, so raw messages never cross to the renderer.
-export type BackupKeyRevealErrorCode = 'audit_unavailable' | 'key_unavailable';
+export type BackupKeyRevealErrorCode =
+  'audit_unavailable' | 'key_unavailable' | 'password_session_required';
 
 export type BackupKeyRevealResult =
   { success: true; key: string } | { success: false; error: BackupKeyRevealErrorCode };
@@ -29,6 +31,13 @@ export async function handleGetBackupEncryptionKey(
   deps: BackupIpcDeps
 ): Promise<BackupKeyRevealResult> {
   const { tenantId, actorId } = requireAdminTenantActor();
+
+  // A PIN session proves only a 4-digit secret; the key is the at-rest secret
+  // for every backup, so it requires a password sign-in. Refused before the key
+  // is resolved and before any audit row is written.
+  if (desktopSession.isPinSession()) {
+    return { success: false, error: 'password_session_required' };
+  }
 
   try {
     const key = await deps.resolveDatabaseEncryptionKey();

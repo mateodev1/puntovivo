@@ -9,7 +9,7 @@
  * @module trpc/routers/auth/mutations
  */
 import { z } from 'zod';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, isNotNull, lt, sql } from 'drizzle-orm';
 import { publicProcedure } from '../../init.js';
 import { protectedProcedure } from '../../middleware/auth.js';
 import { tenantProcedure } from '../../middleware/tenant.js';
@@ -21,6 +21,8 @@ import {
   loginInput,
   changePasswordInput,
   switchStaffInput,
+  pinLoginInput,
+  setMyPinInput,
   validatePasswordStrength,
 } from '../../schemas/auth.js';
 import { throwServerError } from '../../../lib/errorCodes.js';
@@ -66,9 +68,20 @@ import {
 } from '../../../security/refreshTokenFamilies.js';
 import { rateLimitFor } from '../../middleware/procedureRateLimit.js';
 import { setRefreshCookie } from './helpers.js';
-import { getDummyStaffPinHash, verifyStaffPin } from '../../../security/staffPins.js';
+import {
+  consumePinSuccess,
+  isPinLocked,
+  PIN_LOCKOUT_THRESHOLD,
+  registerPinFailure,
+  resetPinFailures,
+  throwPinLocked,
+} from '../../../security/pinLockout.js';
+import { getDummyStaffPinHash, hashStaffPin, verifyStaffPin } from '../../../security/staffPins.js';
+import { enqueueSync } from '../../../services/sync/enqueue.js';
 import { writeAuditLog } from '../../../services/audit-logs.js';
 import { parkDraftsForIdentityChange } from '../../../application/sales/parkDraftsForIdentityChange.js';
+import { assertLocalAuthCapability } from '../../../security/localAuthCapability.js';
+import type { Context } from '../../context.js';
 import { DEVICE_ID_HEADER } from '../../schemas/envelope.js';
 
 function readHeader(value: string | string[] | undefined): string | null {
@@ -104,6 +117,65 @@ async function requireIdentityChangeDevice(ctx: {
   return device.id;
 }
 
+/** Per-user PIN-login throttle bucket (stored in the `username` kind). */
+function pinLoginBucketKey(userId: string): string {
+  return `pin:${userId}`;
+}
+
+/** PIN-login IP bucket, kept apart from the password-login IP bucket. */
+function pinLoginIpKey(ip: string): string {
+  return `pin-ip:${ip}`;
+}
+
+type SessionUser = typeof users.$inferSelect;
+type SessionTenant = typeof tenants.$inferSelect;
+type SessionContext = Pick<Context, 'db' | 'req' | 'res'>;
+
+/**
+ * Shared tail of `auth.login` / `auth.pinLogin`: start a refresh family, sign
+ * both tokens, set the refresh cookie and build the response. When `gate` is
+ * given, it runs inside the same immediate transaction as the family creation,
+ * so a refusal (throw) rolls the whole session grant back.
+ */
+function issueSession(
+  ctx: SessionContext,
+  user: SessionUser,
+  tenant: SessionTenant,
+  sessionClaims?: ReturnType<typeof createStaffPinSessionClaims>,
+  gate?: (tx: typeof ctx.db) => void
+) {
+  pruneExpiredRefreshFamilies(ctx.db);
+  const family = gate
+    ? ctx.db.transaction(
+        tx => {
+          gate(tx as unknown as typeof ctx.db);
+          return createRefreshFamily(tx, { tenantId: user.tenantId, userId: user.id });
+        },
+        { behavior: 'immediate' }
+      )
+    : createRefreshFamily(ctx.db, { tenantId: user.tenantId, userId: user.id });
+
+  const token = signAccessToken(ctx.req.server, user, sessionClaims);
+  const refreshToken = signRefreshToken(ctx.req.server, user, family, sessionClaims);
+  setRefreshCookie(ctx.req, ctx.res, refreshToken);
+
+  return {
+    token,
+    user: {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      tenantId: user.tenantId,
+    },
+    tenant: {
+      id: tenant.id,
+      name: tenant.name,
+      slug: tenant.slug,
+    },
+  };
+}
+
 export const authMutationProcedures = {
   /**
    * switch a shared terminal to another active cashier without
@@ -135,8 +207,13 @@ export const authMutationProcedures = {
 
       const verificationHash = target?.staffPinHash ?? (await getDummyStaffPinHash());
       const pinMatches = await verifyStaffPin(verificationHash, input.pin);
+      const lockable = Boolean(target?.staffPinHash) && target?.id !== actor.id;
+      if (lockable && isPinLocked(target!)) {
+        throwPinLocked();
+      }
       if (!target?.staffPinHash || !pinMatches || target.id === actor.id) {
         registerStaffPinFailure(ctx.db, rateIdentity);
+        if (lockable) registerPinFailure(ctx.db, target!.id);
         throwServerError({
           trpcCode: 'UNAUTHORIZED',
           errorCode: 'AUTH_STAFF_PIN_INVALID',
@@ -196,6 +273,11 @@ export const authMutationProcedures = {
               errorCode: 'AUTH_IDENTITY_CHANGED',
               message: 'The active user for this device changed before staff handoff completed',
             });
+          }
+          // Atomic lock gate: a concurrent request may have locked the PIN
+          // while we awaited Argon2. Refusing here rolls the handoff back.
+          if (!consumePinSuccess(tx as unknown as typeof ctx.db, target.id)) {
+            throwPinLocked();
           }
           parkDraftsForIdentityChange(tx as unknown as typeof ctx.db, {
             tenantId: ctx.tenantId,
@@ -360,8 +442,12 @@ export const authMutationProcedures = {
       });
     }
 
-    // clear the username bucket after every field cleared.
+    // clear the username bucket after every field cleared. A password
+    // sign-in also unlocks the PIN at once: reset the lockout counter AND the
+    // `pin:${id}` PIN-login throttle bucket.
     registerLoginSuccess(ctx.db, email);
+    registerLoginSuccess(ctx.db, pinLoginBucketKey(user.id));
+    resetPinFailures(ctx.db, user.id);
 
     // lazy rehash: if the stored hash was produced with
     // weaker Argon2 params (or a legacy library default), upgrade it
@@ -383,31 +469,104 @@ export const authMutationProcedures = {
     // Auditoría 2026-07 — refresh rotation: each login starts a token
     // family so `auth.refresh` can detect replay of rotated tokens.
     // Login is also the low-frequency hook for pruning expired families.
-    pruneExpiredRefreshFamilies(ctx.db);
-    const family = createRefreshFamily(ctx.db, {
-      tenantId: user.tenantId,
-      userId: user.id,
+    return issueSession(ctx, user, tenant);
+  }),
+
+  /**
+   * Users offered on the desktop PIN login screen. Local-only: refused unless
+   * the request carries the per-boot desktop capability. Locked users are
+   * hidden so the picker never offers a PIN that would be refused.
+   */
+  pinLoginCandidates: publicProcedure.mutation(async ({ ctx }) => {
+    assertLocalAuthCapability(ctx);
+    return ctx.db
+      .select({ id: users.id, name: users.name })
+      .from(users)
+      .innerJoin(tenants, eq(tenants.id, users.tenantId))
+      .where(
+        and(
+          eq(users.isActive, true),
+          eq(tenants.isActive, true),
+          isNotNull(users.staffPinHash),
+          lt(users.pinFailedAttempts, PIN_LOCKOUT_THRESHOLD)
+        )
+      )
+      .orderBy(asc(users.name))
+      .all();
+  }),
+
+  /**
+   * Desktop-only 4-digit PIN login. Order mirrors `switchStaff`: capability,
+   * rate limits, Argon2 verify (dummy hash when there is nothing to verify
+   * against), lock/failure handling, then the success grant inside one
+   * immediate transaction guarded by `consumePinSuccess`.
+   */
+  pinLogin: publicProcedure.input(pinLoginInput).mutation(async ({ ctx, input }) => {
+    assertLocalAuthCapability(ctx);
+    // PIN attempts use their own IP bucket so wrong PINs can never block the
+    // password sign-in that unlocks them.
+    const ip = pinLoginIpKey(ctx.req.ip);
+    const bucketKey = pinLoginBucketKey(input.userId);
+    checkLoginIp(ctx.db, ip);
+    checkLoginUsername(ctx.db, bucketKey);
+
+    const user = await ctx.db.select().from(users).where(eq(users.id, input.userId)).get();
+    const tenant = user
+      ? await ctx.db.select().from(tenants).where(eq(tenants.id, user.tenantId)).get()
+      : undefined;
+
+    const eligible = Boolean(user?.isActive && tenant?.isActive && user?.staffPinHash);
+    const verificationHash =
+      (eligible ? user!.staffPinHash : null) ?? (await getDummyStaffPinHash());
+    const pinMatches = await verifyStaffPin(verificationHash, input.pin);
+
+    if (eligible && isPinLocked(user!)) {
+      throwPinLocked();
+    }
+    if (!eligible || !pinMatches) {
+      registerLoginFailure(ctx.db, ip, bucketKey);
+      if (eligible) registerPinFailure(ctx.db, user!.id);
+      throwServerError({
+        trpcCode: 'UNAUTHORIZED',
+        errorCode: 'AUTH_STAFF_PIN_INVALID',
+        message: 'User or PIN is invalid',
+      });
+    }
+
+    const sessionClaims = createStaffPinSessionClaims();
+    const session = issueSession(ctx, user!, tenant!, sessionClaims, tx => {
+      // Re-read inside the transaction: the user may have been disabled or had
+      // the PIN changed while Argon2 was running.
+      const current = tx.select().from(users).where(eq(users.id, user!.id)).get();
+      if (!current?.isActive || current.staffPinHash !== user!.staffPinHash) {
+        throwServerError({
+          trpcCode: 'UNAUTHORIZED',
+          errorCode: 'AUTH_STAFF_PIN_INVALID',
+          message: 'User or PIN is invalid',
+        });
+      }
+      // Atomic lock gate: concurrent guesses may have locked the PIN while we
+      // awaited Argon2. Refusing here rolls the session grant back.
+      if (!consumePinSuccess(tx, user!.id)) {
+        throwPinLocked();
+      }
+      writeAuditLog({
+        tx,
+        tenantId: user!.tenantId,
+        actorId: user!.id,
+        action: 'auth.pin_login',
+        resourceType: 'user',
+        resourceId: user!.id,
+        before: null,
+        after: { userId: user!.id, role: user!.role },
+        metadata: {
+          authMethod: sessionClaims.authMethod,
+          sessionExpiresAt: new Date(sessionClaims.authSessionExpiresAt!).toISOString(),
+        },
+      });
     });
-
-    const token = signAccessToken(ctx.req.server, user);
-    const refreshToken = signRefreshToken(ctx.req.server, user, family);
-    setRefreshCookie(ctx.req, ctx.res, refreshToken);
-
-    return {
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-        tenantId: user.tenantId,
-      },
-      tenant: {
-        id: tenant.id,
-        name: tenant.name,
-        slug: tenant.slug,
-      },
-    };
+    registerLoginSuccess(ctx.db, bucketKey);
+    return session;
   }),
 
   /**
@@ -537,6 +696,93 @@ export const authMutationProcedures = {
       setRefreshCookie(ctx.req, ctx.res, refreshToken);
 
       return { token };
+    }),
+
+  /**
+   * Self-service staff PIN set/clear, gated by the current password. A wrong
+   * password counts toward the same per-email login bucket as `auth.login`, so
+   * this cannot be used to brute-force the password. Like the admin
+   * `users.setStaffPin`, it does not bump `sessionVersion` and resets the PIN
+   * lockout counter.
+   */
+  setMyPin: protectedProcedure
+    .use(
+      rateLimitFor({
+        name: 'auth.setMyPin',
+        max: 20,
+        windowMs: 60 * 60_000,
+        keyBy: ['userId'],
+      })
+    )
+    .input(setMyPinInput)
+    .mutation(async ({ ctx, input }) => {
+      const actorId = ctx.user.id;
+      const tenantId = ctx.tenantId;
+      if (!tenantId) {
+        throwServerError({
+          trpcCode: 'UNAUTHORIZED',
+          errorCode: 'AUTH_INVALID_CREDENTIALS',
+          message: 'authenticated context required',
+        });
+      }
+      const user = await ctx.db
+        .select()
+        .from(users)
+        .where(and(eq(users.id, actorId), eq(users.tenantId, tenantId)))
+        .get();
+      if (!user || !user.isActive) {
+        throwServerError({
+          trpcCode: 'UNAUTHORIZED',
+          errorCode: 'AUTH_INVALID_CREDENTIALS',
+          message: 'authenticated context required',
+        });
+      }
+
+      const ip = ctx.req.ip;
+      checkLoginUsername(ctx.db, user.email);
+      const passwordOk = await verifyPasswordSecurely(user.passwordHash, input.currentPassword);
+      if (!passwordOk) {
+        registerLoginFailure(ctx.db, ip, user.email);
+        throwServerError({
+          trpcCode: 'UNAUTHORIZED',
+          errorCode: 'AUTH_INVALID_CREDENTIALS',
+          message: 'Current password is incorrect',
+        });
+      }
+
+      const wasConfigured = user.staffPinHash !== null;
+      const willBeConfigured = input.pin !== null;
+      const staffPinHash = input.pin === null ? null : await hashStaffPin(input.pin);
+      const now = new Date().toISOString();
+      ctx.db.transaction(tx => {
+        tx.update(users)
+          .set({ staffPinHash, pinFailedAttempts: 0, updatedAt: now })
+          .where(and(eq(users.id, actorId), eq(users.tenantId, tenantId)))
+          .run();
+        writeAuditLog({
+          tx,
+          tenantId: tenantId,
+          actorId,
+          action: 'user.pin.update',
+          resourceType: 'user',
+          resourceId: actorId,
+          before: { configured: wasConfigured },
+          after: { configured: willBeConfigured },
+          metadata: { targetRole: user.role, self: true },
+        });
+      });
+
+      await enqueueSync(
+        { ...ctx, tenantId },
+        {
+          entityType: 'users',
+          entityId: actorId,
+          operation: 'update',
+          data: { id: actorId, staffPinUpdated: true, updatedAt: now },
+        }
+      );
+
+      return { ok: true as const };
     }),
 
   /**

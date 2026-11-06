@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ConfirmModal, Modal, ModalButton } from '@/components/form-controls/Modal';
+import { STAFF_PIN_LENGTH, STAFF_PIN_PATTERN } from '@/features/auth/pinPolicy';
 
 export interface StaffPinUser {
   id: string;
@@ -15,8 +16,6 @@ interface StaffPinModalProps {
   onClose: () => void;
   onSubmit: (pin: string | null) => Promise<void>;
 }
-
-const STAFF_PIN_PATTERN = /^\d{6}$/;
 
 export function StaffPinModal({ user, isSaving, error, onClose, onSubmit }: StaffPinModalProps) {
   const { t } = useTranslation('settings');
@@ -94,11 +93,11 @@ export function StaffPinModal({ user, isSaving, error, onClose, onSubmit }: Staf
             type="password"
             inputMode="numeric"
             autoComplete="off"
-            maxLength={6}
+            maxLength={STAFF_PIN_LENGTH}
             className="input mt-1 font-mono tracking-[0.35em]"
             value={pin}
             onChange={event => {
-              setPin(event.target.value.replace(/\D/g, '').slice(0, 6));
+              setPin(event.target.value.replace(/\D/g, '').slice(0, STAFF_PIN_LENGTH));
               setValidationError(null);
             }}
             placeholder={t('users.staffPin.placeholder')}

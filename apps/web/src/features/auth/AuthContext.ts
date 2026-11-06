@@ -8,6 +8,8 @@ export interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (credentials: LoginCredentials) => Promise<void>;
+  /** Packaged local desktop only: PIN sign-in using the same session path as login. */
+  loginWithPin: (input: { userId: string; pin: string }) => Promise<void>;
   switchStaff: (input: { targetUserId: string; pin: string }) => Promise<void>;
   logout: () => Promise<void>;
   /**

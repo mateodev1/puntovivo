@@ -122,6 +122,8 @@ export const users = sqliteTable(
     // optional fast-switch credential. Stored as an Argon2id
     // hash and never projected into user/sync/audit responses.
     staffPinHash: text('staff_pin_hash'),
+    // Consecutive failed PIN sign-in attempts; reset on success.
+    pinFailedAttempts: integer('pin_failed_attempts').notNull().default(0),
     sessionVersion: integer('session_version').notNull().default(1),
     role: text('role', { enum: userRoleEnum }).notNull().default('cashier'),
     isActive: integer('is_active', { mode: 'boolean' }).default(true),

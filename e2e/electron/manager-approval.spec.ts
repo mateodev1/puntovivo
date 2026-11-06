@@ -28,7 +28,7 @@ import {
 
 const PRODUCT_NAME = 'E2E Approval Product';
 const PRODUCT_SKU = 'E2E-APPROVAL';
-const MANAGER_PIN = '975310';
+const MANAGER_PIN = '9753';
 const APPROVAL_REASON = 'Documented price match for desktop approval';
 
 function baselineUser(role: E2EUserProfile['role']): E2EUserProfile {

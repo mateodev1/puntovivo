@@ -20,6 +20,7 @@ import { createCustomer } from '../../application/customers/index.js';
 import { assertVersionedWriteApplied } from '../../lib/optimisticVersion.js';
 import { router } from '../init.js';
 import { tenantProcedure } from '../middleware/tenant.js';
+import { passwordSessionRequired } from '../middleware/passwordSession.js';
 import { adminProcedure, managerOrAdminProcedure } from '../middleware/roles.js';
 import {
   auditLogs,
@@ -129,6 +130,7 @@ export const customersRouter = router({
    * counts reach audit metadata; the exported PII never does.
    */
   exportPersonalData: adminProcedure
+    .use(passwordSessionRequired)
     .input(exportCustomerPersonalDataInput)
     .mutation(({ ctx, input }) =>
       ctx.db.transaction(tx => {
@@ -183,6 +185,7 @@ export const customersRouter = router({
    * either path before the PII-free disposition event is appended.
    */
   disposePersonalData: adminProcedure
+    .use(passwordSessionRequired)
     .input(disposeCustomerPersonalDataInput)
     .mutation(async ({ ctx, input }) => {
       const now = new Date().toISOString();

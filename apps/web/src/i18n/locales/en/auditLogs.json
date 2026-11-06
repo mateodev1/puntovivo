@@ -99,6 +99,7 @@
     "user.update": "User updated",
     "user.pin.update": "Staff PIN updated",
     "auth.staff_switch": "Cashier switched",
+    "auth.pin_login": "Signed in with PIN",
     "employee_shift.clock_in": "Employee clocked in",
     "employee_shift.clock_out": "Employee clocked out",
     "scheduled_shift.create": "Scheduled shift created",

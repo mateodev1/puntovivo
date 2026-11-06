@@ -1,24 +1,14 @@
 import { randomBytes } from 'node:crypto';
 import type { PuntovivoServer } from '@puntovivo/server';
+import {
+  createTrustedMainFrameSenderCheck,
+  type TrustedSenderEvent,
+  type TrustedWindow,
+} from './trusted-sender.ts';
 
-/** Structural Electron-free identity guard: object equality is intentional, not renderer IDs. */
-interface SetupSender {
-  isDestroyed: () => boolean;
-  mainFrame: { url: string };
-}
-/** Minimal main-window handle; native object identity binds the setup capability. */
-interface SetupWindow {
-  isDestroyed: () => boolean;
-  webContents: SetupSender;
-}
-/** Invoking frame and sender identities supplied by Electron, never by renderer input. */
-interface SetupEvent {
-  sender: SetupSender;
-  senderFrame: { url: string } | null;
-}
 /** Runtime-owned handles and trust configuration for the fixed first-use command. */
 interface SetupClaimDependencies {
-  getMainWindow: () => SetupWindow | null;
+  getMainWindow: () => TrustedWindow | null;
   getServer: () => Pick<PuntovivoServer, 'getSetupToken' | 'app'> | null;
   isHubClient: boolean;
   isDev: boolean;
@@ -28,49 +18,15 @@ interface SetupClaimDependencies {
 /** Safe renderer result: no capability, transport detail, or credential crosses this boundary. */
 export type InstallationClaimResult = { ok: true } | { ok: false; errorCode: string };
 
-function trustedOrigin(url: string, options: SetupClaimDependencies): boolean {
-  try {
-    const target = new URL(url);
-    if (!options.isDev) {
-      return (
-        target.protocol === 'puntovivo-app:' &&
-        target.hostname === 'app' &&
-        target.port === '' &&
-        target.username === '' &&
-        target.password === '' &&
-        target.pathname === '/index.html'
-      );
-    }
-    const expected = new URL(options.webDevServerUrl);
-    return (
-      ['http:', 'https:'].includes(expected.protocol) &&
-      ['localhost', '127.0.0.1', '[::1]'].includes(expected.hostname) &&
-      target.origin === expected.origin &&
-      target.username === '' &&
-      target.password === ''
-    );
-  } catch {
-    return false;
-  }
-}
-
 /**
  * The packaged renderer cannot read a localhost CSRF cookie. Keep both the
  * one-use proof and cookie in main, and dispatch the fixed tRPC mutation via
  * Fastify's in-process transport. No general-purpose request proxy is exposed.
  */
 export function createInstallationClaimHandler(options: SetupClaimDependencies) {
-  return async (event: SetupEvent, input: unknown): Promise<InstallationClaimResult> => {
-    const window = options.getMainWindow();
-    if (
-      options.isHubClient ||
-      !window ||
-      window.isDestroyed() ||
-      event.sender.isDestroyed() ||
-      event.sender !== window.webContents ||
-      event.senderFrame !== event.sender.mainFrame ||
-      !trustedOrigin(event.sender.mainFrame.url, options)
-    ) {
+  const isTrustedSender = createTrustedMainFrameSenderCheck(options);
+  return async (event: TrustedSenderEvent, input: unknown): Promise<InstallationClaimResult> => {
+    if (options.isHubClient || !isTrustedSender(event)) {
       return { ok: false, errorCode: 'SETUP_LOCAL_ACCESS_REQUIRED' };
     }
     try {

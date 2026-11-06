@@ -538,8 +538,8 @@ describe('manager approvals router', () => {
 
   it('filters the queue and available approvers by the original direct-role boundary', async () => {
     const cashier = await createEmployee('cashier');
-    const manager = await createEmployee('manager', '246810');
-    const admin = await createEmployee('admin', '135790');
+    const manager = await createEmployee('manager', '2468');
+    const admin = await createEmployee('admin', '1357');
     const refund = await appRouter
       .createCaller(cashier.fresh())
       .managerApprovals.request(requestInput('sale_refund'));
@@ -569,7 +569,7 @@ describe('manager approvals router', () => {
 
   it('approves with a fresh manager PIN without replacing the cashier session', async () => {
     const cashier = await createEmployee('cashier');
-    const manager = await createEmployee('manager', '864209');
+    const manager = await createEmployee('manager', '8642');
     const request = await appRouter
       .createCaller(cashier.fresh())
       .managerApprovals.request(requestInput('credit_sale'));
@@ -577,7 +577,7 @@ describe('manager approvals router', () => {
     const decided = await appRouter.createCaller(cashier.fresh()).managerApprovals.decideWithPin({
       requestId: request.id,
       approverId: manager.id,
-      pin: '864209',
+      pin: '8642',
       decision: 'approved',
     });
     expect(decided).toMatchObject({
@@ -614,7 +614,7 @@ describe('manager approvals router', () => {
     expect(managerSecret?.staffPinHash).toBeTruthy();
     const decidedJson = JSON.stringify(decided);
     expect(secretPropertyNames(decided, ['claimToken'])).toEqual([]);
-    expect(decidedJson).not.toContain('864209');
+    expect(decidedJson).not.toContain('8642');
     expect(decidedJson).not.toContain(managerSecret!.staffPinHash!);
 
     const syncRows = await db
@@ -631,13 +631,13 @@ describe('manager approvals router', () => {
     expect(syncRows).toHaveLength(2);
     const syncJson = JSON.stringify(syncRows);
     expect(secretPropertyNames(syncRows, ['claimToken', 'claimExpiresAt'])).toEqual([]);
-    expect(syncJson).not.toContain('864209');
+    expect(syncJson).not.toContain('8642');
     expect(syncJson).not.toContain(managerSecret!.staffPinHash!);
   });
 
   it('reserves the writer before reading decision evidence under WAL contention', async () => {
     const cashier = await createEmployee('cashier');
-    const manager = await createEmployee('manager', '864209');
+    const manager = await createEmployee('manager', '8642');
     const request = await appRouter
       .createCaller(cashier.fresh())
       .managerApprovals.request(requestInput('sale_discount'));
@@ -675,7 +675,7 @@ describe('manager approvals router', () => {
       const decided = await appRouter.createCaller(cashier.fresh()).managerApprovals.decideWithPin({
         requestId: request.id,
         approverId: manager.id,
-        pin: '864209',
+        pin: '8642',
         decision: 'approved',
       });
       expect(decided).toMatchObject({ id: request.id, status: 'approved', decidedBy: manager.id });
@@ -719,8 +719,8 @@ describe('manager approvals router', () => {
     });
     try {
       const cashier = await createEmployee('cashier');
-      const firstManager = await createEmployee('manager', '121212');
-      const secondManager = await createEmployee('manager', '343434');
+      const firstManager = await createEmployee('manager', '1212');
+      const secondManager = await createEmployee('manager', '3434');
       const request = await appRouter
         .createCaller(cashier.fresh())
         .managerApprovals.request(requestInput('sale_refund'));
@@ -735,7 +735,7 @@ describe('manager approvals router', () => {
         .managerApprovals.decideWithPin({
           requestId: request.id,
           approverId: firstManager.id,
-          pin: '121212',
+          pin: '1212',
           decision: 'approved',
         });
       expect(firstDecision).toMatchObject({
@@ -784,7 +784,7 @@ describe('manager approvals router', () => {
         appRouter.createCaller(cashier.fresh()).managerApprovals.decideWithPin({
           requestId: request.id,
           approverId: firstManager.id,
-          pin: '121212',
+          pin: '1212',
           decision: 'approved',
         })
       ).rejects.toMatchObject({
@@ -796,7 +796,7 @@ describe('manager approvals router', () => {
         .managerApprovals.decideWithPin({
           requestId: request.id,
           approverId: secondManager.id,
-          pin: '343434',
+          pin: '3434',
           decision: 'approved',
         });
       expect(secondDecision).toMatchObject({
@@ -854,8 +854,8 @@ describe('manager approvals router', () => {
     });
     try {
       const cashier = await createEmployee('cashier');
-      const firstManager = await createEmployee('manager', '565656');
-      const secondManager = await createEmployee('manager', '787878');
+      const firstManager = await createEmployee('manager', '5656');
+      const secondManager = await createEmployee('manager', '7878');
       const request = await appRouter
         .createCaller(cashier.fresh())
         .managerApprovals.request(requestInput('sale_refund'));
@@ -863,7 +863,7 @@ describe('manager approvals router', () => {
       const partial = await appRouter.createCaller(cashier.fresh()).managerApprovals.decideWithPin({
         requestId: request.id,
         approverId: firstManager.id,
-        pin: '565656',
+        pin: '5656',
         decision: 'approved',
       });
       expect(partial).toMatchObject({ status: 'pending', approvalsCollected: 1 });
@@ -873,7 +873,7 @@ describe('manager approvals router', () => {
         .managerApprovals.decideWithPin({
           requestId: request.id,
           approverId: secondManager.id,
-          pin: '787878',
+          pin: '7878',
           decision: 'rejected',
           reason: 'Discount evidence is incomplete',
         });
@@ -910,7 +910,7 @@ describe('manager approvals router', () => {
   it('rejects invalid or under-privileged PINs without deciding the request', async () => {
     const cashier = await createEmployee('cashier');
     const unrelatedCashier = await createEmployee('cashier');
-    const manager = await createEmployee('manager', '112233');
+    const manager = await createEmployee('manager', '1122');
     const adminOnly = await appRouter
       .createCaller(cashier.fresh())
       .managerApprovals.request(requestInput('credit_override'));
@@ -919,7 +919,7 @@ describe('manager approvals router', () => {
       appRouter.createCaller(cashier.fresh()).managerApprovals.decideWithPin({
         requestId: adminOnly.id,
         approverId: manager.id,
-        pin: '112233',
+        pin: '1122',
         decision: 'approved',
       })
     ).rejects.toMatchObject({
@@ -939,7 +939,7 @@ describe('manager approvals router', () => {
       appRouter.createCaller(unrelatedCashier.fresh()).managerApprovals.decideWithPin({
         requestId: managerRequest.id,
         approverId: manager.id,
-        pin: '112233',
+        pin: '1122',
         decision: 'approved',
       })
     ).rejects.toMatchObject({
@@ -954,7 +954,7 @@ describe('manager approvals router', () => {
   });
 
   it('rejects self-approval without disclosing whether the submitted PIN was valid', async () => {
-    const manager = await createEmployee('manager', '314159');
+    const manager = await createEmployee('manager', '3141');
     const request = await appRouter
       .createCaller(manager.fresh())
       .managerApprovals.request(requestInput('sale_discount'));
@@ -963,7 +963,7 @@ describe('manager approvals router', () => {
       appRouter.createCaller(manager.fresh()).managerApprovals.decideWithPin({
         requestId: request.id,
         approverId: manager.id,
-        pin: '314159',
+        pin: '3141',
         decision: 'approved',
       })
     ).rejects.toMatchObject({
@@ -983,7 +983,7 @@ describe('manager approvals router', () => {
 
   it('requires a rejection reason and records the rejecting manager', async () => {
     const cashier = await createEmployee('cashier');
-    const manager = await createEmployee('manager', '445566');
+    const manager = await createEmployee('manager', '4455');
     const request = await appRouter
       .createCaller(cashier.fresh())
       .managerApprovals.request(requestInput('cash_drawer_open'));
@@ -992,7 +992,7 @@ describe('manager approvals router', () => {
       appRouter.createCaller(cashier.fresh()).managerApprovals.decideWithPin({
         requestId: request.id,
         approverId: manager.id,
-        pin: '445566',
+        pin: '4455',
         decision: 'rejected',
       })
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
@@ -1000,7 +1000,7 @@ describe('manager approvals router', () => {
     const rejected = await appRouter.createCaller(cashier.fresh()).managerApprovals.decideWithPin({
       requestId: request.id,
       approverId: manager.id,
-      pin: '445566',
+      pin: '4455',
       decision: 'rejected',
       reason: 'Drawer count is in progress',
     });
@@ -1013,7 +1013,7 @@ describe('manager approvals router', () => {
 
   it('expires stale requests and keeps them out of the live queue', async () => {
     const cashier = await createEmployee('cashier');
-    const manager = await createEmployee('manager', '778899');
+    const manager = await createEmployee('manager', '7788');
     const request = await appRouter
       .createCaller(cashier.fresh())
       .managerApprovals.request(requestInput('sale_refund'));
@@ -1026,7 +1026,7 @@ describe('manager approvals router', () => {
       appRouter.createCaller(cashier.fresh()).managerApprovals.decideWithPin({
         requestId: request.id,
         approverId: manager.id,
-        pin: '778899',
+        pin: '7788',
         decision: 'approved',
       })
     ).rejects.toMatchObject({
@@ -1042,7 +1042,7 @@ describe('manager approvals router', () => {
 
   it('does not grant a request that expires while its PIN is being verified', async () => {
     const cashier = await createEmployee('cashier');
-    const manager = await createEmployee('manager', '161803');
+    const manager = await createEmployee('manager', '1618');
     const request = await appRouter
       .createCaller(cashier.fresh())
       .managerApprovals.request(requestInput('sale_discount'));
@@ -1055,7 +1055,7 @@ describe('manager approvals router', () => {
       appRouter.createCaller(cashier.fresh()).managerApprovals.decideWithPin({
         requestId: request.id,
         approverId: manager.id,
-        pin: '161803',
+        pin: '1618',
         decision: 'approved',
       })
     ).rejects.toMatchObject({
@@ -1071,7 +1071,7 @@ describe('manager approvals router', () => {
 
   it('rejects a request that expires while waiting to acquire the decision writer', async () => {
     const cashier = await createEmployee('cashier');
-    const manager = await createEmployee('manager', '161803');
+    const manager = await createEmployee('manager', '1618');
     const request = await appRouter
       .createCaller(cashier.fresh())
       .managerApprovals.request(requestInput('sale_discount'));
@@ -1091,7 +1091,7 @@ describe('manager approvals router', () => {
         appRouter.createCaller(cashier.fresh()).managerApprovals.decideWithPin({
           requestId: request.id,
           approverId: manager.id,
-          pin: '161803',
+          pin: '1618',
           decision: 'approved',
         })
       ).rejects.toMatchObject({
@@ -1163,7 +1163,7 @@ describe('manager approvals router', () => {
   });
 
   it('collapses cross-tenant decisions to not found and keeps foreign rows out of the queue', async () => {
-    const manager = await createEmployee('manager', '271828');
+    const manager = await createEmployee('manager', '2718');
     const foreignTenantId = nanoid();
     const foreignCompanyId = nanoid();
     const foreignSiteId = nanoid();
@@ -1230,7 +1230,7 @@ describe('manager approvals router', () => {
       appRouter.createCaller(manager.fresh()).managerApprovals.decideWithPin({
         requestId: foreignRequestId,
         approverId: manager.id,
-        pin: '271828',
+        pin: '2718',
         decision: 'approved',
       })
     ).rejects.toMatchObject({

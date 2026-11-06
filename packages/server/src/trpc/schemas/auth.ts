@@ -48,11 +48,25 @@ export const changePasswordInput = z
 
 export const staffPinSchema = z
   .string()
-  .regex(STAFF_PIN_PATTERN, 'Staff PIN must contain exactly 6 digits');
+  .regex(STAFF_PIN_PATTERN, 'Staff PIN must contain exactly 4 digits');
+
+export const setMyPinInput = z
+  .object({
+    currentPassword: z.string().min(1, 'Current password is required'),
+    pin: staffPinSchema.nullable(),
+  })
+  .strict();
 
 export const switchStaffInput = z
   .object({
     targetUserId: z.string().min(1, 'Target user is required'),
+    pin: staffPinSchema,
+  })
+  .strict();
+
+export const pinLoginInput = z
+  .object({
+    userId: z.string().min(1, 'User is required'),
     pin: staffPinSchema,
   })
   .strict();

@@ -47,6 +47,7 @@ import {
 } from '../../services/payments/manifest.js';
 import { getPaymentRailAdapter } from '../../services/payments/registry.js';
 import { router } from '../init.js';
+import { passwordSessionRequired } from '../middleware/passwordSession.js';
 import { adminProcedure } from '../middleware/roles.js';
 import { updatePaymentRailSettingsInput } from '../schemas/payments.js';
 
@@ -114,6 +115,7 @@ export const paymentSettingsRouter = router({
    * carries fresh readiness without a second query.
    */
   updateRail: adminProcedure
+    .use(passwordSessionRequired)
     .input(updatePaymentRailSettingsInput)
     .mutation(async ({ ctx, input }) => {
       const declaredKeys = new Set(CREDENTIAL_FIELDS_BY_RAIL[input.railId].map(field => field.key));

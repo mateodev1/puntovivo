@@ -25,7 +25,7 @@ import { hasPharmacyOperationalData } from '../../services/pharmacy/operational-
 import { router } from '../init.js';
 import { asCriticalCommandContext } from '../middleware/commandEnvelope.js';
 import {
-  criticalCommandAdminProcedure,
+  criticalCommandPasswordAdminProcedure,
   criticalCommandCashierManagerOrAdminProcedure,
   criticalCommandManagerOrAdminProcedure,
 } from '../middleware/criticalCommand.js';
@@ -105,13 +105,13 @@ export const pharmacyRouter = router({
       if (input.siteId) await ensureTenantSite(ctx.db, ctx.tenantId, input.siteId);
       return listPharmacyAuthorizations(ctx.db, ctx.tenantId, input);
     }),
-  createAuthorization: criticalCommandAdminProcedure
+  createAuthorization: criticalCommandPasswordAdminProcedure
     .input(createPharmacyAuthorizationInput)
     .mutation(async ({ ctx, input }) => {
       if (input.siteId) await ensureTenantSite(ctx.db, ctx.tenantId, input.siteId);
       return createPharmacyAuthorization(pharmacyContext(asCriticalCommandContext(ctx)), input);
     }),
-  revokeAuthorization: criticalCommandAdminProcedure
+  revokeAuthorization: criticalCommandPasswordAdminProcedure
     .input(revokePharmacyAuthorizationInput)
     .mutation(({ ctx, input }) =>
       revokePharmacyAuthorization(pharmacyContext(asCriticalCommandContext(ctx)), input)

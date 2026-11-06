@@ -280,7 +280,7 @@ describe('Store Hub main-process auth custody', () => {
         operation === 'login'
           ? auth.login({ email: 'old@example.test', password: 'secret' })
           : operation === 'switchStaff'
-            ? auth.switchStaff({ targetUserId: 'old', pin: '123456' })
+            ? auth.switchStaff({ targetUserId: 'old', pin: '1234' })
             : auth.logout();
       const rejected = assert.rejects(pending, /active session changed/);
       await started.promise;
@@ -674,6 +674,58 @@ describe('Store Hub main-process auth custody', () => {
     } finally {
       await server.close();
     }
+  });
+
+  it('hub mode does not allow PIN login and local mode stores the grant', async () => {
+    let calls = 0;
+    const hub = createHubAuthSession({
+      hubUrl: 'https://hub.example.test',
+      getStatePath: tempStatePath,
+      safeStorage,
+      fetchImpl: (async () => {
+        calls += 1;
+        return successResponse({});
+      }) as typeof fetch,
+    });
+    await assert.rejects(hub.pinLogin({ userId: 'u1', pin: '1234' }), {
+      errorCode: 'AUTH_PIN_LOGIN_UNAVAILABLE',
+    });
+    await assert.rejects(hub.pinLoginCandidates(), { errorCode: 'AUTH_PIN_LOGIN_UNAVAILABLE' });
+    assert.equal(calls, 0);
+
+    const statePath = tempStatePath();
+    const paths: string[] = [];
+    const local = createHubAuthSession({
+      hubUrl: 'http://127.0.0.1:8090',
+      getStatePath: () => statePath,
+      safeStorage,
+      allowInsecureLoopback: true,
+      allowPinLogin: true,
+      fetchImpl: (async (input: string | URL | Request) => {
+        const path = String(input);
+        paths.push(path);
+        if (path.includes('pinLoginCandidates')) {
+          return successResponse([{ id: 'u1', name: 'Ana' }]);
+        }
+        return successResponse(
+          {
+            token: accessToken(1),
+            user: {
+              id: 'user-1',
+              email: 'admin@example.test',
+              role: 'admin',
+              tenantId: 'tenant-1',
+            },
+          },
+          { refresh: 'refresh-1', csrf: 'csrf-1' }
+        );
+      }) as typeof fetch,
+    });
+    assert.deepEqual(await local.pinLoginCandidates(), [{ id: 'u1', name: 'Ana' }]);
+    const grant = await local.pinLogin({ userId: 'u1', pin: '1234' });
+    assert.equal(grant.token, accessToken(1));
+    assert.equal(existsSync(statePath), true);
+    assert.match(paths[1]!, /auth\.pinLogin\?batch=1$/);
   });
 
   it('streams Store Hub realtime with Bearer refresh, replay cursor, and shared framing', async () => {

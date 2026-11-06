@@ -45,6 +45,7 @@ import { registerPrintIpc } from './ipc/print.js';
 import { registerDataBridgeIpc } from './ipc/register.js';
 import { registerSessionIpc } from './ipc/session-ipc.js';
 import { createInstallationClaimHandler } from './session/installation-claim.js';
+import { createTrustedMainFrameSenderCheck } from './session/trusted-sender.js';
 import { registerWindowIpc } from './ipc/window.js';
 import { createHubAuthSession, HUB_AUTH_STATE_FILE } from './session/hub-auth-session.js';
 import { createLocalAuthFetch } from './session/local-auth-fetch.js';
@@ -150,6 +151,7 @@ const localAuthSession =
         getDeviceId: () => readDeviceIdFromDir(app.getPath('userData')),
         safeStorage,
         allowInsecureLoopback: true,
+        allowPinLogin: true,
         fetchImpl: createLocalAuthFetch(getServer, localAuthOrigin),
       })
     : undefined;
@@ -341,6 +343,11 @@ registerDeviceIpc({ log: mainLog });
 registerSessionIpc({
   ...(hubAuthSession ? { hubAuthSession } : {}),
   ...(localAuthSession ? { localAuthSession } : {}),
+  isTrustedSender: createTrustedMainFrameSenderCheck({
+    getMainWindow: windowLifecycle.getWindow,
+    isDev,
+    webDevServerUrl: WEB_DEV_SERVER_URL,
+  }),
 });
 ipcMain.handle(
   'session:complete-setup',

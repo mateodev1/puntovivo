@@ -10,6 +10,8 @@ import { translateServerError } from '@/lib/translateServerError';
 import type { LoginCredentials } from '@/types';
 import { isDeviceIdentityChanged } from './authBootstrapFailure';
 import { getLastDesktopLoginEmail } from './authStorage';
+import { isPinLoginAvailable } from './localDesktopAuthTransport';
+import { PinLoginForm } from './PinLoginForm';
 
 const InstallationSetupPage = lazy(() =>
   import('./InstallationSetupPage').then(module => ({ default: module.InstallationSetupPage }))
@@ -33,6 +35,9 @@ export function LoginPage() {
       ? translateServerError(error, t, t('errors:server.unknown'))
       : null;
   const [showPassword, setShowPassword] = useState(false);
+  const pinAvailable = isPinLoginAvailable();
+  const [mode, setMode] = useState<'pin' | 'password'>(pinAvailable ? 'pin' : 'password');
+  const [showPinSetupHint, setShowPinSetupHint] = useState(false);
   const {
     register,
     handleSubmit,
@@ -131,85 +136,108 @@ export function LoginPage() {
               {t('login.signInDescription')}
             </p>
 
-            <form className="mt-8 space-y-5" onSubmit={handleSubmit(onSubmit)}>
-              {errorMessage && (
-                <div className="rounded-[11px] border border-danger-500/20 bg-danger-50 px-4 py-3 text-sm text-danger-700">
-                  {errorMessage}
-                </div>
-              )}
+            {mode === 'pin' ? (
+              <PinLoginForm
+                onUsePassword={reason => {
+                  setShowPinSetupHint(reason === 'no-candidates');
+                  setMode('password');
+                }}
+              />
+            ) : (
+              <form className="mt-8 space-y-5" onSubmit={handleSubmit(onSubmit)}>
+                {showPinSetupHint && (
+                  <p className="text-sm text-fg2">{t('pinLogin.noCandidatesHint')}</p>
+                )}
+                {errorMessage && (
+                  <div className="rounded-[11px] border border-danger-500/20 bg-danger-50 px-4 py-3 text-sm text-danger-700">
+                    {errorMessage}
+                  </div>
+                )}
 
-              <div className="space-y-2">
-                <label htmlFor="email" className="label">
-                  {t('login.emailLabel')}
-                </label>
-                <input
-                  id="email"
-                  type="email"
-                  autoComplete="email"
-                  className="input"
-                  placeholder={t('login.emailPlaceholder')}
-                  {...register('email', {
-                    required: t('login.emailRequired'),
-                    pattern: {
-                      value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+(\.[A-Z]{2,})?$/i,
-                      message: t('login.emailInvalid'),
-                    },
-                  })}
-                />
-                {errors.email && <p className="text-sm text-danger-600">{errors.email.message}</p>}
-              </div>
-
-              <div className="space-y-2">
-                <label htmlFor="password" className="label">
-                  {t('login.passwordLabel')}
-                </label>
-                <div className="relative">
+                <div className="space-y-2">
+                  <label htmlFor="email" className="label">
+                    {t('login.emailLabel')}
+                  </label>
                   <input
-                    id="password"
-                    type={showPassword ? 'text' : 'password'}
-                    autoComplete="current-password"
-                    className="input pr-11"
-                    placeholder="••••••••"
-                    {...register('password', {
-                      required: t('login.passwordRequired'),
-                      minLength: {
-                        value: 6,
-                        message: t('login.passwordMinLength'),
+                    id="email"
+                    type="email"
+                    autoComplete="email"
+                    className="input"
+                    placeholder={t('login.emailPlaceholder')}
+                    {...register('email', {
+                      required: t('login.emailRequired'),
+                      pattern: {
+                        value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+(\.[A-Z]{2,})?$/i,
+                        message: t('login.emailInvalid'),
                       },
                     })}
                   />
+                  {errors.email && (
+                    <p className="text-sm text-danger-600">{errors.email.message}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <label htmlFor="password" className="label">
+                    {t('login.passwordLabel')}
+                  </label>
+                  <div className="relative">
+                    <input
+                      id="password"
+                      type={showPassword ? 'text' : 'password'}
+                      autoComplete="current-password"
+                      className="input pr-11"
+                      placeholder="••••••••"
+                      {...register('password', {
+                        required: t('login.passwordRequired'),
+                        minLength: {
+                          value: 6,
+                          message: t('login.passwordMinLength'),
+                        },
+                      })}
+                    />
+                    <button
+                      type="button"
+                      className="btn-ghost btn-icon absolute right-1.5 top-1/2 h-8 w-8 -translate-y-1/2"
+                      onClick={() => setShowPassword(current => !current)}
+                      aria-label={showPassword ? t('login.hidePassword') : t('login.showPassword')}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                  {errors.password && (
+                    <p className="text-sm text-danger-600">{errors.password.message}</p>
+                  )}
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="btn-primary h-12 w-full justify-center"
+                >
+                  {isLoading ? (
+                    <>
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                      {t('login.signingIn')}
+                    </>
+                  ) : (
+                    <>
+                      <LogIn className="h-4 w-4" />
+                      {t('login.enterWorkspace')}
+                    </>
+                  )}
+                </button>
+                {pinAvailable && (
                   <button
                     type="button"
-                    className="btn-ghost btn-icon absolute right-1.5 top-1/2 h-8 w-8 -translate-y-1/2"
-                    onClick={() => setShowPassword(current => !current)}
-                    aria-label={showPassword ? t('login.hidePassword') : t('login.showPassword')}
+                    className="btn-ghost w-full justify-center"
+                    onClick={() => setMode('pin')}
                   >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    {t('pinLogin.usePin')}
                   </button>
-                </div>
-                {errors.password && (
-                  <p className="text-sm text-danger-600">{errors.password.message}</p>
                 )}
-              </div>
-
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="btn-primary h-12 w-full justify-center"
-              >
-                {isLoading ? (
-                  <>
-                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                    {t('login.signingIn')}
-                  </>
-                ) : (
-                  <>
-                    <LogIn className="h-4 w-4" />
-                    {t('login.enterWorkspace')}
-                  </>
-                )}
-              </button>
-            </form>
+              </form>
+            )}
           </div>
 
           <div className="mt-8 flex items-center justify-between gap-4 border-t border-line/70 pt-5 text-xs text-fg2">

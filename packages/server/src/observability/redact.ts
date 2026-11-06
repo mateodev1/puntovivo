@@ -38,6 +38,7 @@ const REDACT_FIELD_NAMES: readonly string[] = [
   'refreshtoken',
   'jwtsecret',
   'authorization',
+  'xpuntovivolocalauth',
   'cookie',
   // `email` is included on the local logger; we keep it here too so
   // a misconfigured adapter cannot leak operator-identifying email

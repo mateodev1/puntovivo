@@ -3,6 +3,7 @@ import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:f
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { seedHistoricalDefaults } from './utils/historicalSeed.js';
 import { closeDatabase, initDatabase } from '../db/index.js';
 import { sites, users } from '../db/schema.js';
 
@@ -20,8 +21,9 @@ describe('inventory constraint migration preservation', () => {
       journal.entries = journal.entries.filter((entry: { idx: number }) => entry.idx < 89);
       expect(journal.entries).toHaveLength(89);
       writeFileSync(journalPath, JSON.stringify(journal));
-      const old = await initDatabase({ dbPath, migrationsFolder: prefix, seedData: true });
-      const owner = old.select().from(users).get()!;
+      const old = await initDatabase({ dbPath, migrationsFolder: prefix, seedData: false });
+      await seedHistoricalDefaults(old);
+      const owner = old.select({ id: users.id, tenantId: users.tenantId }).from(users).get()!;
       const site = old.select().from(sites).get()!;
       const sqlite = old.$client;
       for (const [rowid, id, lots] of [
@@ -153,8 +155,9 @@ describe('inventory constraint migration preservation', () => {
       const journal = JSON.parse(readFileSync(journalPath, 'utf8'));
       journal.entries = journal.entries.filter((entry: { idx: number }) => entry.idx < 89);
       writeFileSync(journalPath, JSON.stringify(journal));
-      const old = await initDatabase({ dbPath: file, migrationsFolder: prefix, seedData: true });
-      const owner = old.select().from(users).get()!;
+      const old = await initDatabase({ dbPath: file, migrationsFolder: prefix, seedData: false });
+      await seedHistoricalDefaults(old);
+      const owner = old.select({ id: users.id, tenantId: users.tenantId }).from(users).get()!;
       old.$client
         .prepare(
           'INSERT INTO products(id,tenant_id,name,sku,inventory_value_cents) VALUES(?,?,?,?,100)'

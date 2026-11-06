@@ -17,7 +17,7 @@ import { attachClientIssueTracker, expectNoClientIssues } from '../web/support/a
 import { E2E_USERS, type E2EUserProfile } from '../shared/baseline.js';
 import { goToRoute, requestRoute, signIn, signOut } from './support/journey.js';
 
-const CASHIER_PIN = '246810';
+const CASHIER_PIN = '2468';
 
 function baselineUser(role: E2EUserProfile['role']): E2EUserProfile {
   const user = E2E_USERS.find(candidate => candidate.role === role);

@@ -683,7 +683,7 @@
       "help": "Keep this checkout open. A manager chooses their name and enters their own PIN.",
       "loadError": "Eligible managers could not be loaded.",
       "empty": "No eligible manager is available for this approval.",
-      "pinMissing": "Eligible managers need a staff PIN before they can approve here.",
+      "pinMissing": "Eligible managers must set a 4-digit PIN in \"My PIN\" before they can approve here.",
       "approverLabel": "Responsible person",
       "pinLabel": "Their staff PIN",
       "submit": "Approve checkout",

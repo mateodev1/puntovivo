@@ -46,3 +46,21 @@ export async function clearLocal(): Promise<void> {
   if (!clear) throw new Error('Local desktop authentication bridge is unavailable');
   await clear();
 }
+
+export function isPinLoginAvailable(): boolean {
+  if (!isPackagedLocalAuth()) return false;
+  const api = window.api?.session ?? window.session;
+  return Boolean(api?.pinLoginCandidatesLocal && api.pinLoginLocal);
+}
+
+export async function pinLoginCandidatesLocal() {
+  const candidates = localSessionApi().pinLoginCandidatesLocal;
+  if (!candidates) throw new Error('Local desktop authentication bridge is unavailable');
+  return unwrapHubResult(await candidates());
+}
+
+export async function pinLoginLocal(input: { userId: string; pin: string }) {
+  const pinLogin = localSessionApi().pinLoginLocal;
+  if (!pinLogin) throw new Error('Local desktop authentication bridge is unavailable');
+  return unwrapHubResult(await pinLogin(input));
+}

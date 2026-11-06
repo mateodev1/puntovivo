@@ -20,6 +20,12 @@ import {
   registerStaffPinFailure,
   registerStaffPinSuccess,
 } from '../../security/loginRateLimit.js';
+import {
+  consumePinSuccess,
+  isPinLocked,
+  registerPinFailure,
+  throwPinLocked,
+} from '../../security/pinLockout.js';
 import { getDummyStaffPinHash, verifyStaffPin } from '../../security/staffPins.js';
 import {
   canRoleApproveAction,
@@ -539,6 +545,7 @@ export const managerApprovalsRouter = router({
           name: users.name,
           role: users.role,
           staffPinHash: users.staffPinHash,
+          pinFailedAttempts: users.pinFailedAttempts,
         })
         .from(users)
         .where(
@@ -561,8 +568,13 @@ export const managerApprovalsRouter = router({
       const verificationHash =
         eligible && approver?.staffPinHash ? approver.staffPinHash : await getDummyStaffPinHash();
       const pinMatches = await verifyStaffPin(verificationHash, input.pin);
+      const lockable = eligible && Boolean(approver?.staffPinHash);
+      if (lockable && isPinLocked(approver!)) {
+        throwPinLocked();
+      }
       if (!eligible || !approver?.staffPinHash || !pinMatches) {
         registerStaffPinFailure(criticalCtx.db, rateIdentity);
+        if (lockable) registerPinFailure(criticalCtx.db, approver!.id);
         throwApprovalPinInvalid();
       }
 
@@ -574,6 +586,11 @@ export const managerApprovalsRouter = router({
           // be promoted if another connection commits during this decision.
           // Both Argon2 and acquiring the writer may outlast the request TTL.
           // Freeze decision time only after both waits have completed.
+          // Atomic lock gate (see consumePinSuccess): refuse if concurrent
+          // failures locked the approver while Argon2 was in flight.
+          if (!consumePinSuccess(tx as unknown as typeof criticalCtx.db, approver.id)) {
+            throwPinLocked();
+          }
           const decidedNowMs = Date.now();
           const decidedAt = new Date(decidedNowMs).toISOString();
           const current = tx

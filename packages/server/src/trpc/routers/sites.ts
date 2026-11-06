@@ -17,6 +17,7 @@ import { and, asc, eq, inArray, like, or, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { router } from '../init.js';
 import { tenantProcedure } from '../middleware/tenant.js';
+import { passwordSessionRequired } from '../middleware/passwordSession.js';
 import { adminProcedure } from '../middleware/roles.js';
 import { ensureTenantSite } from '../middleware/tenantSite.js';
 import { companies, locationXSite, locations, sequentials, sites } from '../../db/schema.js';
@@ -294,52 +295,57 @@ export const sitesRouter = router({
       };
     }),
 
-  delete: adminProcedure.input(deleteSiteInput).mutation(async ({ ctx, input }) => {
-    const existing = await ctx.db
-      .select()
-      .from(sites)
-      .where(and(eq(sites.id, input.id), eq(sites.tenantId, ctx.tenantId)))
-      .get();
+  delete: adminProcedure
+    .use(passwordSessionRequired)
+    .input(deleteSiteInput)
+    .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.db
+        .select()
+        .from(sites)
+        .where(and(eq(sites.id, input.id), eq(sites.tenantId, ctx.tenantId)))
+        .get();
 
-    if (!existing) {
-      throw new TRPCError({ code: 'NOT_FOUND', message: 'Site not found' });
-    }
+      if (!existing) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Site not found' });
+      }
 
-    const references = await ctx.db
-      .select({ count: sql<number>`count(*)` })
-      .from(sequentials)
-      .where(and(eq(sequentials.tenantId, ctx.tenantId), eq(sequentials.siteId, input.id)))
-      .get();
+      const references = await ctx.db
+        .select({ count: sql<number>`count(*)` })
+        .from(sequentials)
+        .where(and(eq(sequentials.tenantId, ctx.tenantId), eq(sequentials.siteId, input.id)))
+        .get();
 
-    if ((references?.count ?? 0) > 0) {
-      throw new TRPCError({
-        code: 'BAD_REQUEST',
-        message: 'Site has configured sequentials. Deactivate it instead of deleting it.',
+      if ((references?.count ?? 0) > 0) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Site has configured sequentials. Deactivate it instead of deleting it.',
+        });
+      }
+
+      const locationAssignmentCount = await ctx.db
+        .select({ count: sql<number>`count(*)` })
+        .from(locationXSite)
+        .where(and(eq(locationXSite.tenantId, ctx.tenantId), eq(locationXSite.siteId, input.id)))
+        .get();
+
+      if ((locationAssignmentCount?.count ?? 0) > 0) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Site has assigned locations. Remove them before deleting the site.',
+        });
+      }
+
+      await ctx.db
+        .delete(sites)
+        .where(and(eq(sites.id, input.id), eq(sites.tenantId, ctx.tenantId)));
+
+      await enqueueSync(ctx, {
+        entityType: 'sites',
+        entityId: input.id,
+        operation: 'delete',
+        data: { id: input.id },
       });
-    }
 
-    const locationAssignmentCount = await ctx.db
-      .select({ count: sql<number>`count(*)` })
-      .from(locationXSite)
-      .where(and(eq(locationXSite.tenantId, ctx.tenantId), eq(locationXSite.siteId, input.id)))
-      .get();
-
-    if ((locationAssignmentCount?.count ?? 0) > 0) {
-      throw new TRPCError({
-        code: 'BAD_REQUEST',
-        message: 'Site has assigned locations. Remove them before deleting the site.',
-      });
-    }
-
-    await ctx.db.delete(sites).where(and(eq(sites.id, input.id), eq(sites.tenantId, ctx.tenantId)));
-
-    await enqueueSync(ctx, {
-      entityType: 'sites',
-      entityId: input.id,
-      operation: 'delete',
-      data: { id: input.id },
-    });
-
-    return { success: true, id: input.id };
-  }),
+      return { success: true, id: input.id };
+    }),
 });

@@ -341,7 +341,7 @@ describe('Users tRPC Router', () => {
       isActive: true,
     });
 
-    const configured = await caller.users.setStaffPin({ id: created.id, pin: '246810' });
+    const configured = await caller.users.setStaffPin({ id: created.id, pin: '2468' });
     expect(configured).toEqual({ success: true, id: created.id, hasPin: true });
 
     const stored = await getDatabase()
@@ -350,7 +350,7 @@ describe('Users tRPC Router', () => {
       .where(eq(users.id, created.id))
       .get();
     expect(stored?.staffPinHash).toMatch(/^\$argon2id\$/);
-    expect(stored?.staffPinHash).not.toContain('246810');
+    expect(stored?.staffPinHash).not.toContain('2468');
 
     const listed = await caller.users.list({ page: 1, perPage: 20, search: 'PIN User' });
     expect(listed.items[0]).toMatchObject({ id: created.id, hasPin: true });
@@ -364,7 +364,7 @@ describe('Users tRPC Router', () => {
     const pinAudit = audit.find(row => row.action === 'user.pin.update');
     expect(pinAudit?.before).toEqual({ configured: false });
     expect(pinAudit?.after).toEqual({ configured: true });
-    expect(JSON.stringify(pinAudit)).not.toContain('246810');
+    expect(JSON.stringify(pinAudit)).not.toContain('2468');
 
     const cleared = await caller.users.setStaffPin({ id: created.id, pin: null });
     expect(cleared.hasPin).toBe(false);
@@ -381,7 +381,7 @@ describe('Users tRPC Router', () => {
     });
     const managerCaller = appRouter.createCaller(createTestContext('manager'));
     await expect(
-      managerCaller.users.setStaffPin({ id: created.id, pin: '123456' })
+      managerCaller.users.setStaffPin({ id: created.id, pin: '1234' })
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 });

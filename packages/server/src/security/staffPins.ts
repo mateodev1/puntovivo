@@ -1,7 +1,7 @@
 /**
  * Staff PIN policy — .
  *
- * PINs are intentionally fixed at six digits: short enough for a shared POS,
+ * PINs are intentionally fixed at four digits: short enough for a shared POS,
  * but paired with Argon2id storage and persistent failure throttles because the
  * credential space is still low entropy. A domain prefix prevents a copied
  * password hash from being accepted as a PIN hash (or vice versa).
@@ -9,10 +9,10 @@
 
 import { hashPasswordSecurely, verifyPasswordSecurely } from './passwords.js';
 
-export const STAFF_PIN_LENGTH = 6;
-export const STAFF_PIN_PATTERN = /^\d{6}$/;
+export const STAFF_PIN_LENGTH = 4;
+export const STAFF_PIN_PATTERN = /^\d{4}$/;
 
-const STAFF_PIN_DOMAIN = 'puntovivo:staff-pin:v1:';
+const STAFF_PIN_DOMAIN = 'puntovivo:staff-pin:v2:';
 
 function credential(pin: string): string {
   return `${STAFF_PIN_DOMAIN}${pin}`;
@@ -41,7 +41,7 @@ let dummyHashPromise: Promise<string> | null = null;
 /** Timing equalizer for unavailable/unenrolled switch targets. */
 export function getDummyStaffPinHash(): Promise<string> {
   if (!dummyHashPromise) {
-    dummyHashPromise = hashStaffPin('000000');
+    dummyHashPromise = hashStaffPin('0000');
   }
   return dummyHashPromise;
 }

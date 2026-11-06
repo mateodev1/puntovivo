@@ -22,6 +22,7 @@ import { TRPCError } from '@trpc/server';
 import { and, desc, eq, ne } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { router } from '../init.js';
+import { passwordSessionRequired } from '../middleware/passwordSession.js';
 import { adminProcedure, managerOrAdminProcedure } from '../middleware/roles.js';
 import { webhookDeliveries, webhookOutbox, webhookSubscriptions } from '../../db/schema.js';
 import { writeAuditLog } from '../../services/audit-logs.js';
@@ -73,6 +74,7 @@ export const eventsRouter = router({
   ),
 
   createSubscription: adminProcedure
+    .use(passwordSessionRequired)
     .input(createWebhookSubscriptionInput)
     .mutation(async ({ ctx, input }) => {
       if (!hasWebhookSecretKey()) {
@@ -149,6 +151,7 @@ export const eventsRouter = router({
     .mutation(({ ctx, input }) => mutateSubscriptionState(ctx, input.id, false)),
 
   revokeSubscription: adminProcedure
+    .use(passwordSessionRequired)
     .input(webhookSubscriptionIdInput)
     .mutation(({ ctx, input }) => revokeSubscription(ctx, input.id)),
 
@@ -193,56 +196,59 @@ export const eventsRouter = router({
         .all()
     ),
 
-  retryDelivery: adminProcedure.input(retryWebhookDeliveryInput).mutation(({ ctx, input }) => {
-    const row = ctx.db
-      .select({ id: webhookOutbox.id, status: webhookOutbox.status })
-      .from(webhookOutbox)
-      .where(and(eq(webhookOutbox.id, input.outboxId), eq(webhookOutbox.tenantId, ctx.tenantId)))
-      .get();
-    if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'Webhook event not found' });
-    if (row.status !== 'dead_letter') {
-      throw new TRPCError({
-        code: 'CONFLICT',
-        message: 'Only a dead-letter webhook event can be retried manually',
-      });
-    }
-    const now = new Date().toISOString();
-    ctx.db.transaction(tx => {
-      tx.update(webhookOutbox)
-        .set({
-          status: 'queued',
-          attempts: 0,
-          nextRetryAt: null,
-          lastError: null,
-          claimToken: null,
-          lockedAt: null,
-          updatedAt: now,
-        })
-        .where(and(eq(webhookOutbox.id, row.id), eq(webhookOutbox.tenantId, ctx.tenantId)))
-        .run();
-      tx.update(webhookDeliveries)
-        .set({ status: 'pending', responseStatus: null, lastErrorCode: null, updatedAt: now })
-        .where(
-          and(
-            eq(webhookDeliveries.outboxId, row.id),
-            eq(webhookDeliveries.tenantId, ctx.tenantId),
-            ne(webhookDeliveries.status, 'delivered')
+  retryDelivery: adminProcedure
+    .use(passwordSessionRequired)
+    .input(retryWebhookDeliveryInput)
+    .mutation(({ ctx, input }) => {
+      const row = ctx.db
+        .select({ id: webhookOutbox.id, status: webhookOutbox.status })
+        .from(webhookOutbox)
+        .where(and(eq(webhookOutbox.id, input.outboxId), eq(webhookOutbox.tenantId, ctx.tenantId)))
+        .get();
+      if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'Webhook event not found' });
+      if (row.status !== 'dead_letter') {
+        throw new TRPCError({
+          code: 'CONFLICT',
+          message: 'Only a dead-letter webhook event can be retried manually',
+        });
+      }
+      const now = new Date().toISOString();
+      ctx.db.transaction(tx => {
+        tx.update(webhookOutbox)
+          .set({
+            status: 'queued',
+            attempts: 0,
+            nextRetryAt: null,
+            lastError: null,
+            claimToken: null,
+            lockedAt: null,
+            updatedAt: now,
+          })
+          .where(and(eq(webhookOutbox.id, row.id), eq(webhookOutbox.tenantId, ctx.tenantId)))
+          .run();
+        tx.update(webhookDeliveries)
+          .set({ status: 'pending', responseStatus: null, lastErrorCode: null, updatedAt: now })
+          .where(
+            and(
+              eq(webhookDeliveries.outboxId, row.id),
+              eq(webhookDeliveries.tenantId, ctx.tenantId),
+              ne(webhookDeliveries.status, 'delivered')
+            )
           )
-        )
-        .run();
-      writeAuditLog({
-        tx,
-        tenantId: ctx.tenantId,
-        actorId: ctx.user!.id,
-        action: 'webhook_delivery.retry',
-        resourceType: 'webhook_outbox',
-        resourceId: row.id,
-        before: { status: row.status },
-        after: { status: 'queued' },
+          .run();
+        writeAuditLog({
+          tx,
+          tenantId: ctx.tenantId,
+          actorId: ctx.user!.id,
+          action: 'webhook_delivery.retry',
+          resourceType: 'webhook_outbox',
+          resourceId: row.id,
+          before: { status: row.status },
+          after: { status: 'queued' },
+        });
       });
-    });
-    return { id: row.id, status: 'queued' as const };
-  }),
+      return { id: row.id, status: 'queued' as const };
+    }),
 
   /**
    * Tail of `webhook_outbox` for the active tenant. Operations
