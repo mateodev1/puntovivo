@@ -52,6 +52,44 @@ is usable from source, but it is not a new packaged release yet.
   a real alert receiver with ownership, and an observed retail pilot remain
   open gates.
 
+## [1.17.0](https://github.com/mateodev1/puntovivo/compare/v1.16.1...v1.17.0) (2026-11-06)
+
+
+### Features
+
+* **auth:** add local-only PIN login ([227b020](https://github.com/mateodev1/puntovivo/commit/227b0205650743454d5870a0778862d72d3f13dc))
+* **auth:** add per-boot local desktop auth capability ([23e5e42](https://github.com/mateodev1/puntovivo/commit/23e5e42d933c2e5819f238d2ada4de643698c46d))
+* **auth:** let users set their own PIN ([ef64f36](https://github.com/mateodev1/puntovivo/commit/ef64f36f532ae23aaf71ca0274f48e9c14f1f99d))
+* **auth:** lock staff PIN after five consecutive failures ([bae6270](https://github.com/mateodev1/puntovivo/commit/bae6270bd7944ca00b758f6af07fc7b95ccfd25d))
+* **auth:** shorten staff PIN to four digits ([64a1d59](https://github.com/mateodev1/puntovivo/commit/64a1d59df41eaf587d5227fc9fa1f4d77326e12d))
+* **auth:** sign in with a 4-digit PIN on the desktop app ([ce4f187](https://github.com/mateodev1/puntovivo/commit/ce4f187237153785c5e566ce3c21374e0b428389))
+* **desktop:** expose local PIN login bridge ([d3c7b96](https://github.com/mateodev1/puntovivo/commit/d3c7b9680558a06dc71eaab7c9380010aea7202a))
+* **web:** sign in with PIN on desktop ([4e4f3f5](https://github.com/mateodev1/puntovivo/commit/4e4f3f5582d04d1113affb3b3a4b834e242d4778))
+* **web:** switch PIN inputs to four digits and add My PIN ([8f61338](https://github.com/mateodev1/puntovivo/commit/8f61338d736545f60b9a86e17ca66caa29e6acaa))
+
+
+### Bug Fixes
+
+* **auth:** audit PIN sign-ins and isolate PIN login throttling ([d05f3c5](https://github.com/mateodev1/puntovivo/commit/d05f3c5d7f8074245c224645b03af818c32a9b29))
+* **auth:** enforce PIN lockout atomically after the Argon2 verify ([c46cbca](https://github.com/mateodev1/puntovivo/commit/c46cbca4971e8466a45d9921bb22d477157b3b6c))
+* **auth:** guard irreversible admin actions and keep hub PIN sessions marked ([dcb9373](https://github.com/mateodev1/puntovivo/commit/dcb9373265f5e65d5b641b1d8380d41f7a828978))
+* **auth:** require a password session for trust and secret admin actions ([30375b6](https://github.com/mateodev1/puntovivo/commit/30375b648b77e35f58a93998b8ddcbc30b0b9c4b))
+* **auth:** require a password session for user administration ([51e1677](https://github.com/mateodev1/puntovivo/commit/51e16776efcf5abc7411dbe6b6115b0ced7a6ff2))
+* **deps:** re-review exact overrides and clear the dependency audit ([16766d1](https://github.com/mateodev1/puntovivo/commit/16766d13cf2c66f467ec1c523b3ba413f8ffc2f5))
+* **deps:** re-review exact overrides and clear the dependency audit ([05e8155](https://github.com/mateodev1/puntovivo/commit/05e8155cd9577ad1a43fb9d73e916e481beae223))
+* **desktop:** accept PIN login IPC only from the main window ([dbb3797](https://github.com/mateodev1/puntovivo/commit/dbb37974209fe1919f8eb2b5b47efab110ddc6b7))
+* **desktop:** keep the forge dev loop out of production NODE_ENV ([607762f](https://github.com/mateodev1/puntovivo/commit/607762f6622f65c38aec2caa3777adb4d123a171))
+* **desktop:** keep the forge dev loop out of production NODE_ENV ([03cc136](https://github.com/mateodev1/puntovivo/commit/03cc136acef1c1306c5ec0eee7737fcb34815628))
+* **desktop:** refuse backup key reveal for PIN sessions ([a09daf4](https://github.com/mateodev1/puntovivo/commit/a09daf49315370dfc057ced7f8486ddf4236bb31))
+* **web:** point PIN setup copy at My PIN ([5535919](https://github.com/mateodev1/puntovivo/commit/5535919d51007255c9a5d96895fbb92565f8adbc))
+* **web:** unblock PIN sign-in and explain missing PINs ([99f2ebf](https://github.com/mateodev1/puntovivo/commit/99f2ebfb7b9a804241b1d89735bf58718b3c264f))
+* **web:** use tú register in password-session copy ([c371995](https://github.com/mateodev1/puntovivo/commit/c371995bfd493bb128522e3b683dee1fffa86f4c))
+
+
+### Performance
+
+* **web:** rebaseline settings and auditLogs chunks for PIN sign-in copy ([ef393cd](https://github.com/mateodev1/puntovivo/commit/ef393cde2e2384bf045b801d96b7e26f8850a66a))
+
 ## [1.14.4](https://github.com/johnny4young/puntovivo/compare/v1.14.3...v1.14.4) (2026-09-16)
 
 
